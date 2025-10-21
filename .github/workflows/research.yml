@@ -1,28 +1,62 @@
 name: research
+
 on:
   workflow_dispatch:
     inputs:
-      user_prompt: { description: "What to research (free text)", required: true, default: "Market analysis: meditation apps and doomscrolling" }
-      report_type: { description: "auto|market|competitor|trend|sentiment|ideation|faq", required: true, default: "auto" }
-      max_subs: { description: "Max subreddits", required: true, default: "8" }
-      months: { description: "Default months (planner may override)", required: true, default: "12" }
-      min_upvotes: { description: "Default min upvotes", required: true, default: "20" }
-      limit: { description: "Default per-subreddit cap", required: true, default: "1000" }
-      keywords: { description: "Optional keyword filter", required: false, default: "" }
-permissions: { contents: write, pages: write, id-token: write }
-concurrency: { group: "pages", cancel-in-progress: true }
+      user_prompt:
+        description: "What to research (free text)"
+        required: true
+        default: "Market analysis: meditation apps and doomscrolling"
+      report_type:
+        description: "auto|market|competitor|trend|sentiment|ideation|faq"
+        required: true
+        default: "auto"
+      max_subs:
+        description: "Max subreddits"
+        required: true
+        default: "8"
+      months:
+        description: "Default months (planner may override)"
+        required: true
+        default: "12"
+      min_upvotes:
+        description: "Default min upvotes"
+        required: true
+        default: "20"
+      limit:
+        description: "Default per-subreddit cap"
+        required: true
+        default: "1000"
+      keywords:
+        description: "Optional keyword filter"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+        with:
+          python-version: "3.11"
+
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r pipeline/requirements.txt
-      - name: Plan
+
+      - name: Plan (LLM or heuristic)
         env:
           USER_PROMPT: ${{ github.event.inputs.user_prompt }}
           REPORT_TYPE: ${{ github.event.inputs.report_type }}
@@ -38,42 +72,50 @@ jobs:
           REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
         run: |
           mkdir -p data reports public
-          python pipeline/llm_planner.py --prompt "${USER_PROMPT}" --report-type "${REPORT_TYPE}" --max-subs ${MAX_SUBS} --default-months ${MONTHS} --default-min-upvotes ${MIN_UPVOTES} --default-limit ${LIMIT} --keywords "${KEYWORDS}" --out data/plan.json
-          echo "SUBS=$(python - <<'PY'
-import json;print(' '.join(json.load(open('data/plan.json'))['subreddits']))
-PY
-)" >> $GITHUB_ENV
-          echo "MONTHS=$(python - <<'PY'
-import json;print(json.load(open('data/plan.json'))['params']['months'])
-PY
-)" >> $GITHUB_ENV
-          echo "MIN_UPVOTES=$(python - <<'PY'
-import json;print(json.load(open('data/plan.json'))['params']['min_upvotes'])
-PY
-)" >> $GITHUB_ENV
-          echo "LIMIT=$(python - <<'PY'
-import json;print(json.load(open('data/plan.json'))['params']['limit'])
-PY
-)" >> $GITHUB_ENV
-          echo "KEYWORDS=$(python - <<'PY'
-import json;print(' '.join(json.load(open('data/plan.json'))['filters'].get('keywords', [])))
-PY
-)" >> $GITHUB_ENV
-          echo "REPORT_TYPE=$(python - <<'PY'
-import json;print(json.load(open('data/plan.json'))['report_type'])
-PY
-)" >> $GITHUB_ENV
+          python pipeline/llm_planner.py \
+            --prompt "${USER_PROMPT}" \
+            --report-type "${REPORT_TYPE}" \
+            --max-subs ${MAX_SUBS} \
+            --default-months ${MONTHS} \
+            --default-min-upvotes ${MIN_UPVOTES} \
+            --default-limit ${LIMIT} \
+            --keywords "${KEYWORDS}" \
+            --out data/plan.json
+
+          # ⬇️ YAML-safe export (python -c; hiçbir heredoc yok)
+          SUBS=$(python -c "import json;print(' '.join(json.load(open('data/plan.json'))['subreddits']))")
+          MONTHS_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['months'])")
+          MIN_UPVOTES_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['min_upvotes'])")
+          LIMIT_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['limit'])")
+          KEYWORDS_P=$(python -c "import json;print(' '.join(json.load(open('data/plan.json'))['filters'].get('keywords', [])))")
+          REPORT_TYPE_P=$(python -c "import json;print(json.load(open('data/plan.json'))['report_type'])")
+
+          echo "SUBS=${SUBS}" >> $GITHUB_ENV
+          echo "MONTHS=${MONTHS_P}" >> $GITHUB_ENV
+          echo "MIN_UPVOTES=${MIN_UPVOTES_P}" >> $GITHUB_ENV
+          echo "LIMIT=${LIMIT_P}" >> $GITHUB_ENV
+          echo "KEYWORDS=${KEYWORDS_P}" >> $GITHUB_ENV
+          echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
+
       - name: Scrape
         env:
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
           REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
         run: |
-          echo "Subs: ${SUBS}"
-          python pipeline/scrape_reddit.py --use-pushshift --subs ${SUBS} --months ${MONTHS} --min-upvotes ${MIN_UPVOTES} --limit ${LIMIT} --out data/raw.jsonl
+          echo "Planned subreddits: ${SUBS}"
+          python pipeline/scrape_reddit.py \
+            --use-pushshift \
+            --subs ${SUBS} \
+            --months ${MONTHS} \
+            --min-upvotes ${MIN_UPVOTES} \
+            --limit ${LIMIT} \
+            --out data/raw.jsonl
+
       - name: Keyword filter (optional)
         if: ${{ env.KEYWORDS != '' }}
-        env: { KEYWORDS: ${{ env.KEYWORDS }} }
+        env:
+          KEYWORDS: ${{ env.KEYWORDS }}
         run: |
           python - <<'PY'
 import json, os
@@ -83,18 +125,35 @@ with open(inp,"r",encoding="utf-8") as f, open(outp,"w",encoding="utf-8") as g:
     for line in f:
         d = json.loads(line); txt = (d.get("title","")+" "+d.get("selftext","")).lower()
         if all(k.lower() in txt for k in kw): g.write(json.dumps(d, ensure_ascii=False)+"\n")
-os.replace(outp, inp)
+os.replace(outp, inp); print("Applied keywords:", kw)
 PY
+
       - name: Analyze
-        run: python pipeline/analyze.py --in data/raw.jsonl --out data/analysis.parquet --report reports/pain_map.md
+        run: |
+          python pipeline/analyze.py \
+            --in data/raw.jsonl \
+            --out data/analysis.parquet \
+            --report reports/pain_map.md
+
       - name: Build report
-        run: python pipeline/build_report_dynamic.py --plan data/plan.json --pain-map reports/pain_map.md --analysis data/analysis.parquet --out public/index.html
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: public }
+        run: |
+          python pipeline/build_report_dynamic.py \
+            --plan data/plan.json \
+            --pain-map reports/pain_map.md \
+            --analysis data/analysis.parquet \
+            --out public/index.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment: { name: github-pages, url: ${{ steps.deployment.outputs.page_url }} }
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
