@@ -49,6 +49,10 @@ SYNONYM_MAP = {
     _normalize_lookup("performans"): ["performance", "app performance", "performance optimization"],
     _normalize_lookup("güvenlik"): ["security", "app security", "mobile security", "data privacy"],
     _normalize_lookup("yenilikçilik"): ["innovation", "innovative features", "innovation strategy"],
+    _normalize_lookup("uygulama geliştirme"): ["application development", "product development", "mobile development"],
+    _normalize_lookup("uygulama gelistirme"): ["application development", "product development", "mobile development"],
+    _normalize_lookup("geliştirme"): ["development", "application development"],
+    _normalize_lookup("gelistirme"): ["development", "application development"],
     _normalize_lookup("yapay zeka"): ["artificial intelligence", "ai"],
     _normalize_lookup("sesli komut"): ["voice control", "voice commands", "speech recognition"],
 }
@@ -84,6 +88,17 @@ def _expand_keywords(keywords):
         base_forms = [kw, kw.translate(ASCII_FALLBACK)]
         variants = []
         lookup_keys = {_normalize_lookup(kw), _normalize_lookup(kw.translate(ASCII_FALLBACK))}
+        suffixes = ["lari", "leri", "lar", "ler", "nin", "nın", "nun", "nün", "in", "ın", "un", "ün",
+                    "si", "sı", "su", "sü", "da", "de", "ta", "te", "dan", "den", "tan", "ten",
+                    "ya", "ye", "yla", "yle", "yla", "yle", "li", "lı", "lu", "lü"]
+        extended = set()
+        for lk in list(lookup_keys):
+            if not lk:
+                continue
+            for suf in suffixes:
+                if lk.endswith(suf) and len(lk) - len(suf) >= 3:
+                    extended.add(lk[:-len(suf)])
+        lookup_keys |= extended
         for lk in lookup_keys:
             if lk and lk in SYNONYM_MAP:
                 variants.extend(SYNONYM_MAP[lk])
@@ -160,42 +175,123 @@ def english_keywords(prompt: str, keywords: str):
     return english
 
 
+def _basic_terms(prompt: str, keywords: str):
+    base = []
+    seen = set()
+    suffixes = ["lari", "leri", "lar", "ler", "nin", "nın", "nun", "nün", "in", "ın", "un", "ün",
+                "si", "sı", "su", "sü", "da", "de", "ta", "te", "dan", "den", "tan", "ten",
+                "ya", "ye", "yla", "yle", "li", "lı", "lu", "lü"]
+    for tok in tokens(prompt) + tokens(keywords):
+        if not tok:
+            continue
+        ascii_tok = tok.translate(ASCII_FALLBACK)
+        ascii_tok = TOKEN_CLEAN_RE.sub(" ", ascii_tok).strip()
+        ascii_tok = ascii_tok.encode("ascii", "ignore").decode().strip()
+        if not ascii_tok or len(ascii_tok) < 3:
+            continue
+        key = ascii_tok.lower()
+        lookup_keys = {_normalize_lookup(tok), _normalize_lookup(ascii_tok)}
+        for lk in list(lookup_keys):
+            if not lk:
+                continue
+            for suf in suffixes:
+                if lk.endswith(suf) and len(lk) - len(suf) >= 3:
+                    lookup_keys.add(lk[:-len(suf)])
+        variants = []
+        for lk in lookup_keys:
+            if lk and lk in SYNONYM_MAP:
+                variants.extend(SYNONYM_MAP[lk])
+        if variants:
+            for v in variants:
+                vk = v.casefold()
+                if vk in seen or vk in STOP_WORDS:
+                    continue
+                seen.add(vk)
+                base.append(v)
+            continue
+        if key in STOP_WORDS or key in seen:
+            continue
+        seen.add(key)
+        base.append(ascii_tok)
+    return base
+
+
+def build_search_queries(prompt: str, keywords: str, max_terms: int = 16):
+    queries = []
+    primary = english_keywords(prompt, keywords)
+    if primary:
+        terms = []
+        for kw in primary:
+            if len(terms) >= max_terms:
+                break
+            terms.append(f'"{kw}"' if " " in kw else kw)
+        if terms:
+            queries.append(terms)
+
+    basics = _basic_terms(prompt, keywords)
+    if basics:
+        queries.append(basics[:max_terms])
+
+    generic = [
+        "physiognomy",
+        "face reading",
+        "mobile app design",
+        "mobile ux",
+        "app security",
+        "mobile innovation",
+    ]
+    queries.append(generic[:max_terms])
+
+    uniq = []
+    seen = set()
+    for terms in queries:
+        key = tuple(terms)
+        if key in seen or not terms:
+            continue
+        seen.add(key)
+        uniq.append(terms)
+    return uniq
+
+
 def build_search_terms(prompt: str, keywords: str, max_terms: int = 16):
-    expanded = english_keywords(prompt, keywords)
-    if not expanded:
-        return []
-    terms = [f'"{kw}"' if " " in kw else kw for kw in expanded[:max_terms]]
-    return terms
+    queries = build_search_queries(prompt, keywords, max_terms)
+    return queries[0] if queries else []
 
 
 def discover(prompt, keywords, months=12, max_subs=8, pages=8, page_size=100):
-    terms = build_search_terms(prompt, keywords)
-    query = " OR ".join(terms)
-    if not query:
-        return []
-
-    params = {
-        "q": query,
-        "after": after_ts(months),
-        "size": page_size,
-        "sort": "desc",
-        "sort_type": "created_utc",
-    }
+    strategies = build_search_queries(prompt, keywords, max_terms=max_subs * 2 or 16)
     subs = Counter()
-    before = None
-    for _ in range(pages):
-        if before:
-            params["before"] = before
-        data = _req(params)
-        if not data:
+    for idx, terms in enumerate(strategies, 1):
+        query = " OR ".join(terms)
+        if not query:
+            continue
+        print(f"[discover] Strategy {idx}: {query}")
+        params = {
+            "q": query,
+            "after": after_ts(months),
+            "size": page_size,
+            "sort": "desc",
+            "sort_type": "created_utc",
+        }
+        before = None
+        for _ in range(pages):
+            if before:
+                params["before"] = before
+            data = _req(params)
+            if not data:
+                break
+            for item in data:
+                sr = item.get("subreddit")
+                if not sr:
+                    continue
+                subs.update([str(sr)])
+            before = int(data[-1].get("created_utc", 0)) or None
+            time.sleep(0.25)
+        if subs:
             break
-        for item in data:
-            sr = item.get("subreddit")
-            if not sr:
-                continue
-            subs.update([str(sr)])
-        before = int(data[-1].get("created_utc", 0)) or None
-        time.sleep(0.25)
+
+    if not subs:
+        return []
 
     top = []
     for sr, _cnt in subs.most_common(64):

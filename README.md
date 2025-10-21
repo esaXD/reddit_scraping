@@ -7,4 +7,4 @@ Type any prompt. The agent plans subreddits and strategy (LLM if available), scr
 - Add secrets as needed: OPENAI_API_KEY / ANTHROPIC_API_KEY, REDDIT_CLIENT_ID/SECRET/USER_AGENT
 - Actions -> **research** -> Run workflow -> Enter **user_prompt**
 - Workflow runs *Test Reddit API health* to validate the PullPush mirror; inspect `data/api_diagnostics.json` on failures.
-- Turkish prompts/keywords are expanded with English synonyms and enforced as filters so the scrape stays on-topic.
+- Prompts automatically expand into English keyword sets; scraping widens the search/filter scope in stages if the data is too sparse.

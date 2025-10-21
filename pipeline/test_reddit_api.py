@@ -9,7 +9,7 @@ import requests
 
 from discover_subs import (
     BASE as SEARCH_BASE,
-    build_search_terms,
+    build_search_queries,
     after_ts,
 )
 
@@ -65,19 +65,9 @@ def main():
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
 
-    terms = build_search_terms(args.prompt, args.keywords, max_terms=args.max_subs * 2)
+    queries = build_search_queries(args.prompt, args.keywords, max_terms=args.max_subs * 2)
     checks = []
-    if terms:
-        query = " OR ".join(terms)
-        params = {
-            "q": query,
-            "after": after_ts(args.months),
-            "size": 25,
-            "sort": "desc",
-            "sort_type": "created_utc",
-        }
-        checks.append(_check(SEARCH_BASE, params, "search_query"))
-    else:
+    if not queries:
         checks.append({
             "label": "search_query",
             "url": "",
@@ -87,6 +77,21 @@ def main():
             "items": None,
             "body_preview": "No keywords generated from prompt/keywords; cannot test PullPush search.",
         })
+    else:
+        for idx, terms in enumerate(queries, 1):
+            query = " OR ".join(terms)
+            params = {
+                "q": query,
+                "after": after_ts(args.months),
+                "size": 25,
+                "sort": "desc",
+                "sort_type": "created_utc",
+            }
+            label = "search_query" if len(queries) == 1 else f"search_query_{idx}"
+            result = _check(SEARCH_BASE, params, label)
+            checks.append(result)
+            if result.get("ok") and result.get("items"):
+                break
 
     subs = [s.strip() for s in args.subs.split() if s.strip()]
     for sub in subs[: max(args.max_subs, 5)]:

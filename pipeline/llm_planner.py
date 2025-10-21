@@ -35,9 +35,10 @@ def is_non_english(s: str) -> bool:
     tr = set("çğıöşüÇĞİÖŞÜ")
     return any((ord(ch) > 127) or (ch in tr) for ch in s)
 
-def _prepare_keywords(raw_keywords) -> list:
-    if not raw_keywords:
-        return []
+def _prepare_keywords(prompt_text: str, raw_keywords) -> list:
+    if raw_keywords is None or raw_keywords == "":
+        kws = english_keywords(prompt_text, "")
+        return kws[:24] if kws else []
     if isinstance(raw_keywords, (list, tuple)):
         parts = []
         for item in raw_keywords:
@@ -53,7 +54,8 @@ def _prepare_keywords(raw_keywords) -> list:
         joined = " ".join(parts)
     else:
         joined = str(raw_keywords)
-    return english_keywords("", joined)
+    kws = english_keywords(prompt_text, joined)
+    return kws[:24] if kws else []
 
 
 def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
@@ -95,12 +97,19 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
         uniq.append(s)
     subs = uniq[:max_subs]
 
-    return {
+    filters = english_keywords(prompt, keywords)
+    if not filters:
+        filters = english_keywords(prompt, "")
+    filters = filters[:24] if filters else []
+
+    plan = {
         "subreddits": subs,
         "params": {"months": int(m), "min_upvotes": int(u), "limit": int(lim)},
-        "filters": {"keywords": _prepare_keywords(keywords)},
         "report_type": report_type,
     }
+    if filters:
+        plan["filters"] = {"keywords": filters}
+    return plan
 
 def call_openai(system, user):
     try:
@@ -180,7 +189,7 @@ def main():
         plan["rationale"] = "llm"
 
     existing_kw = plan.get("filters", {}).get("keywords")
-    canonical_kw = _prepare_keywords(existing_kw) or _prepare_keywords(a.keywords)
+    canonical_kw = _prepare_keywords(a.prompt, existing_kw) or _prepare_keywords(a.prompt, a.keywords)
     if canonical_kw:
         plan.setdefault("filters", {})["keywords"] = canonical_kw
     else:

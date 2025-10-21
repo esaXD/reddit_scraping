@@ -7,7 +7,7 @@ from typing import List
 from datetime import datetime, timedelta
 import requests
 from util import ensure_dirs, save_jsonl, clean_text, now_iso
-from discover_subs import english_keywords, build_search_terms, ASCII_FALLBACK
+from discover_subs import english_keywords, build_search_queries, ASCII_FALLBACK
 
 BASE = "https://api.pullpush.io/reddit/search/submission/"  # PullPush mirror
 
@@ -143,10 +143,20 @@ def main():
     prompt_text = a.prompt or ""
     keyword_input = " ".join(a.keywords or [])
     keyword_variants = english_keywords(prompt_text, keyword_input)
-    search_terms = build_search_terms(prompt_text, keyword_input) if (prompt_text or keyword_input) else []
+    search_strategies = build_search_queries(prompt_text, keyword_input) if (prompt_text or keyword_input) else []
 
     rows_subs = pushshift_by_subs(a.subs, since, a.limit, a.min_upvotes)
-    rows_kw = pushshift_by_keywords(search_terms, since, a.limit, a.min_upvotes) if search_terms else []
+
+    rows_kw = []
+    for idx, terms in enumerate(search_strategies, 1):
+        results = pushshift_by_keywords(terms, since, a.limit, a.min_upvotes)
+        rows_kw.extend(results)
+        print(f"Keyword strategy {idx} -> {len(results)} posts (cumulative {len(rows_kw)})")
+        if len(rows_kw) >= max(25, a.limit // 10):
+            break
+    if not rows_kw and search_strategies:
+        print("Keyword strategies returned no rows; relying on subreddit scrape only.")
+
     rows = rows_subs + rows_kw
 
     # dedupe by id
@@ -158,6 +168,8 @@ def main():
         seen.add(r["id"])
         ded.append(r)
 
+    original_count = len(ded)
+
     if keyword_variants:
         match_terms = []
         for term in keyword_variants:
@@ -166,14 +178,26 @@ def main():
             match_terms.append(low.translate(ASCII_FALLBACK))
         match_terms = [m for m in {t for t in match_terms if t}]
 
-        def _matches(row):
-            text = f"{row.get('title','')} {row.get('selftext','')}".casefold()
-            return any(term in text for term in match_terms)
+        broad_terms = {part.strip().casefold() for term in keyword_variants for part in term.split()}
+        broad_terms |= {bt.translate(ASCII_FALLBACK) for bt in broad_terms}
+        broad_terms = {t for t in broad_terms if t}
 
-        ded = [r for r in ded if _matches(r)]
+        def _matches(row, terms):
+            text = f"{row.get('title','')} {row.get('selftext','')}".casefold()
+            return any(term in text for term in terms)
+
+        filtered = [r for r in ded if _matches(r, match_terms)]
+        if len(filtered) < 15 and broad_terms:
+            print(f"Strict keyword filter kept {len(filtered)} posts; retrying with broader tokens.")
+            filtered = [r for r in ded if _matches(r, broad_terms)]
+
+        if not filtered and ded:
+            print("Keyword filtering removed all posts; returning unfiltered data.")
+        else:
+            ded = filtered
 
     save_jsonl(ded, a.out)
-    print(f"Saved {len(ded)} items to {a.out}")
+    print(f"Saved {len(ded)} items to {a.out} (from {original_count} collected)")
 
 if __name__ == "__main__":
     main()

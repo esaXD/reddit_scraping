@@ -20,7 +20,8 @@ def main():
     args = ap.parse_args()
 
     kws_raw = parse_keywords(args.keywords)
-    kws = [k.casefold() for k in english_keywords("", " ".join(kws_raw))]
+    english = english_keywords("", " ".join(kws_raw))[:24]
+    kws = [k.casefold() for k in english]
     if not kws:
         # no-op copy
         with open(args.in_path, "r", encoding="utf-8") as f, open(args.out_path, "w", encoding="utf-8") as g:
