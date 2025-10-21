@@ -138,7 +138,9 @@ jobs:
           python pipeline/filter_keywords.py \
             --in data/raw.jsonl \
             --out data/raw.jsonl \
-            --keywords ${{ github.event.inputs.keywords }}
+            --keywords "${{ github.event.inputs.keywords }}" \
+            --mode any
+
 
 
 
