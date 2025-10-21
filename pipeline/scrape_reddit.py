@@ -137,7 +137,9 @@ def main():
     a = ap.parse_args()
 
     ensure_dirs(a.out)
-    since = month_ago_utc(a.months)
+    base_months = max(1, int(a.months))
+    base_min_upvotes = max(0, int(a.min_upvotes))
+    target_posts = max(50, min(a.limit, 200))
 
     # Subreddit sonuçları + keyword sonuçları = birleşim
     prompt_text = a.prompt or ""
@@ -145,28 +147,54 @@ def main():
     keyword_variants = english_keywords(prompt_text, keyword_input)
     search_strategies = build_search_queries(prompt_text, keyword_input) if (prompt_text or keyword_input) else []
 
-    rows_subs = pushshift_by_subs(a.subs, since, a.limit, a.min_upvotes)
+    attempts = []
+    attempts.append(
+        {"months": base_months, "min_upvotes": base_min_upvotes, "label": "base window"}
+    )
+    if base_min_upvotes > 5:
+        attempts.append(
+            {"months": base_months, "min_upvotes": max(base_min_upvotes // 2, 3), "label": "lower upvotes"}
+        )
+    if base_months < 24:
+        attempts.append(
+            {"months": max(24, base_months * 2), "min_upvotes": max(base_min_upvotes // 2, 0), "label": "older window"}
+        )
+    attempts.append(
+        {"months": max(36, base_months * 3), "min_upvotes": 0, "label": "broad fallback"}
+    )
 
-    rows_kw = []
-    for idx, terms in enumerate(search_strategies, 1):
-        results = pushshift_by_keywords(terms, since, a.limit, a.min_upvotes)
-        rows_kw.extend(results)
-        print(f"Keyword strategy {idx} -> {len(results)} posts (cumulative {len(rows_kw)})")
-        if len(rows_kw) >= max(25, a.limit // 10):
-            break
-    if not rows_kw and search_strategies:
-        print("Keyword strategies returned no rows; relying on subreddit scrape only.")
-
-    rows = rows_subs + rows_kw
-
-    # dedupe by id
-    seen = set()
     ded = []
-    for r in rows:
-        if r["id"] in seen:
-            continue
-        seen.add(r["id"])
-        ded.append(r)
+    seen = set()
+    for attempt in attempts:
+        months_cur = attempt["months"]
+        min_upvotes_cur = attempt["min_upvotes"]
+        label = attempt["label"]
+        since = month_ago_utc(months_cur)
+
+        subs_rows = pushshift_by_subs(a.subs, since, a.limit, min_upvotes_cur)
+
+        kw_rows = []
+        if search_strategies:
+            for idx, terms in enumerate(search_strategies, 1):
+                results = pushshift_by_keywords(terms, since, a.limit, min_upvotes_cur)
+                kw_rows.extend(results)
+                print(f"Keyword strategy {idx} ({label}) -> {len(results)} posts (cumulative {len(kw_rows)})")
+                if len(kw_rows) >= max(40, a.limit // 5):
+                    break
+
+        rows = subs_rows + kw_rows
+        added = 0
+        for r in rows:
+            if r["id"] in seen:
+                continue
+            seen.add(r["id"])
+            ded.append(r)
+            added += 1
+        print(f"Attempt {label}: months={months_cur}, min_upvotes={min_upvotes_cur} -> added {added} (total {len(ded)})")
+
+        if len(ded) >= target_posts:
+            print(f"Reached target of {target_posts} posts; stopping further attempts.")
+            break
 
     original_count = len(ded)
 
