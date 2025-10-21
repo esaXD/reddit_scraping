@@ -167,6 +167,7 @@ jobs:
           fi
           python pipeline/scrape_reddit.py \
             --subs ${SUBS} \
+            --prompt "${{ github.event.inputs.user_prompt }}" \
             --months ${MONTHS} \
             --min-upvotes ${MIN_UPVOTES} \
             --limit ${LIMIT} \

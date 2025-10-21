@@ -7,6 +7,7 @@ from typing import List
 from datetime import datetime, timedelta
 import requests
 from util import ensure_dirs, save_jsonl, clean_text, now_iso
+from discover_subs import build_keywords, build_search_terms, ASCII_FALLBACK
 
 BASE = "https://api.pullpush.io/reddit/search/submission/"  # PullPush mirror
 
@@ -127,6 +128,7 @@ def main():
     import json
     ap = argparse.ArgumentParser()
     ap.add_argument("--subs", nargs="+", required=True)
+    ap.add_argument("--prompt", default="")
     ap.add_argument("--months", type=int, default=12)
     ap.add_argument("--limit", type=int, default=2000)
     ap.add_argument("--min-upvotes", type=int, default=20)
@@ -138,8 +140,13 @@ def main():
     since = month_ago_utc(a.months)
 
     # Subreddit sonuçları + keyword sonuçları = birleşim
+    prompt_text = a.prompt or ""
+    keyword_input = " ".join(a.keywords or [])
+    keyword_variants = build_keywords(prompt_text, keyword_input)
+    search_terms = build_search_terms(prompt_text, keyword_input) if (prompt_text or keyword_input) else []
+
     rows_subs = pushshift_by_subs(a.subs, since, a.limit, a.min_upvotes)
-    rows_kw = pushshift_by_keywords(a.keywords, since, a.limit, a.min_upvotes) if a.keywords else []
+    rows_kw = pushshift_by_keywords(search_terms, since, a.limit, a.min_upvotes) if search_terms else []
     rows = rows_subs + rows_kw
 
     # dedupe by id
@@ -150,6 +157,20 @@ def main():
             continue
         seen.add(r["id"])
         ded.append(r)
+
+    if keyword_variants:
+        match_terms = []
+        for term in keyword_variants:
+            low = term.casefold()
+            match_terms.append(low)
+            match_terms.append(low.translate(ASCII_FALLBACK))
+        match_terms = [m for m in {t for t in match_terms if t}]
+
+        def _matches(row):
+            text = f"{row.get('title','')} {row.get('selftext','')}".casefold()
+            return any(term in text for term in match_terms)
+
+        ded = [r for r in ded if _matches(r)]
 
     save_jsonl(ded, a.out)
     print(f"Saved {len(ded)} items to {a.out}")

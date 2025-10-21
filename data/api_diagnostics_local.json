@@ -2,28 +2,28 @@
   "checks": [
     {
       "label": "search_query",
-      "url": "https://api.pullpush.io/reddit/search/submission/?q=ilmi+OR+sima+OR+mobil+OR+uygulamas%C4%B1nda+OR+uygulamasinda+OR+gerekenler&after=1729944210&size=25&sort=desc&sort_type=created_utc",
+      "url": "https://api.pullpush.io/reddit/search/submission/?q=ilmi+OR+physiognomy+OR+%22face+reading%22+OR+%22face+analysis%22+OR+sima+OR+mobil+OR+mobile+OR+%22mobile+app%22+OR+%22mobile+application%22+OR+uygulama+OR+app+OR+application+OR+%C3%B6zellikler+OR+ozellikler+OR+features+OR+%22feature+set%22&after=1729944903&size=25&sort=desc&sort_type=created_utc",
       "status": 200,
       "ok": true,
-      "elapsed_sec": 1.996,
+      "elapsed_sec": 0.722,
       "items": 0,
       "body_preview": ""
     },
     {
       "label": "subreddit:Android",
-      "url": "https://api.pullpush.io/reddit/search/submission/?subreddit=Android&after=1729944212&size=25&sort=desc&sort_type=created_utc",
+      "url": "https://api.pullpush.io/reddit/search/submission/?subreddit=Android&after=1729944904&size=25&sort=desc&sort_type=created_utc",
       "status": 200,
       "ok": true,
-      "elapsed_sec": 1.312,
+      "elapsed_sec": 0.852,
       "items": 25,
       "body_preview": ""
     },
     {
       "label": "subreddit:iOS",
-      "url": "https://api.pullpush.io/reddit/search/submission/?subreddit=iOS&after=1729944213&size=25&sort=desc&sort_type=created_utc",
+      "url": "https://api.pullpush.io/reddit/search/submission/?subreddit=iOS&after=1729944905&size=25&sort=desc&sort_type=created_utc",
       "status": 200,
       "ok": true,
-      "elapsed_sec": 1.075,
+      "elapsed_sec": 0.829,
       "items": 25,
       "body_preview": ""
     }

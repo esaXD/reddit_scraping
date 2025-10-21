@@ -27,6 +27,31 @@ ASCII_FALLBACK = str.maketrans({
 TOKEN_CLEAN_RE = re.compile(r"[^0-9A-Za-zçğıöşüÇĞİÖŞÜıİ+#\-/_.]")
 
 
+def _normalize_lookup(term: str) -> str:
+    cleaned = TOKEN_CLEAN_RE.sub(" ", term or "").strip().casefold()
+    cleaned = cleaned.translate(ASCII_FALLBACK)
+    return cleaned
+
+
+SYNONYM_MAP = {
+    _normalize_lookup("ilmi"): ["physiognomy", "face reading", "face analysis"],
+    _normalize_lookup("sima"): ["physiognomy", "face reading"],
+    _normalize_lookup("ilmi sima"): ["physiognomy", "face reading", "face mapping"],
+    _normalize_lookup("yüz okuma"): ["face reading", "physiognomy"],
+    _normalize_lookup("mobil"): ["mobile", "mobile app", "mobile application"],
+    _normalize_lookup("uygulama"): ["app", "application", "mobile app"],
+    _normalize_lookup("uygulama özellikler"): ["app features", "feature set", "product requirements"],
+    _normalize_lookup("özellikler"): ["features", "feature set"],
+    _normalize_lookup("kullanıcı deneyimi"): ["user experience", "ux", "ux research", "ux design"],
+    _normalize_lookup("tasarım"): ["design", "app design", "ui design", "ux design"],
+    _normalize_lookup("performans"): ["performance", "app performance", "performance optimization"],
+    _normalize_lookup("güvenlik"): ["security", "app security", "mobile security", "data privacy"],
+    _normalize_lookup("yenilikçilik"): ["innovation", "innovative features", "innovation strategy"],
+    _normalize_lookup("yapay zeka"): ["artificial intelligence", "ai"],
+    _normalize_lookup("sesli komut"): ["voice control", "voice commands", "speech recognition"],
+}
+
+
 def tokens(text: str):
     if not text:
         return []
@@ -54,15 +79,21 @@ def tokens(text: str):
 def _expand_keywords(keywords):
     expanded, seen = [], set()
     for kw in keywords:
-        for cand in (kw, kw.translate(ASCII_FALLBACK)):
+        variants = [kw, kw.translate(ASCII_FALLBACK)]
+        lookup_keys = {_normalize_lookup(kw), _normalize_lookup(kw.translate(ASCII_FALLBACK))}
+        for lk in lookup_keys:
+            if lk and lk in SYNONYM_MAP:
+                variants.extend(SYNONYM_MAP[lk])
+        for cand in variants:
             cand = cand.strip()
             if len(cand) < 3:
                 continue
-            if cand in STOP_WORDS:
+            cand_key = cand.casefold()
+            if cand_key in STOP_WORDS:
                 continue
-            if cand in seen:
+            if cand_key in seen:
                 continue
-            seen.add(cand)
+            seen.add(cand_key)
             expanded.append(cand)
     return expanded
 
@@ -102,7 +133,7 @@ def build_search_terms(prompt: str, keywords: str, max_terms: int = 16):
     expanded = build_keywords(prompt, keywords)
     if not expanded:
         return []
-    terms = ['"{kw}"' if " " in kw else kw for kw in expanded[:max_terms]]
+    terms = [f'"{kw}"' if " " in kw else kw for kw in expanded[:max_terms]]
     return terms
 
 
