@@ -1,5 +1,4 @@
-# pipeline/filter_keywords.py
-import argparse, json, sys
+import argparse, json
 
 def main():
     ap = argparse.ArgumentParser()
@@ -10,7 +9,7 @@ def main():
 
     kws = [k.lower() for k in args.keywords]
     if not kws:
-        # no-op: just copy through
+        # no-op copy
         with open(args.in_path, "r", encoding="utf-8") as f, open(args.out_path, "w", encoding="utf-8") as g:
             for line in f: g.write(line)
         print("No keywords provided; skipping filter.")
