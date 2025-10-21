@@ -1,3 +1,4 @@
+# pipeline/llm_planner.py
 import os
 import json
 import re
@@ -37,14 +38,16 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
     words = norm(prompt).split()
     subs = []
 
+    # Basit curated eşleşmeler (nötr; meditasyona zorlamıyoruz)
     for w in words:
         if w in CURATED:
             subs += CURATED[w]
 
-        if not subs:
-        subs = []  # boş kalsın; discovery dolduracak
+    # Hiçbir şey bulunamazsa boş bırak; discovery dolduracak
+    if not subs:
+        subs = []
 
-
+    # Report type otomatik seçimi
     if report_type == "auto":
         if any(w in words for w in ["market", "pricing", "monetization"]):
             report_type = "market"
@@ -59,6 +62,7 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
         else:
             report_type = "faq"
 
+    # uniq + kes
     uniq = []
     seen = set()
     for s in subs:
@@ -153,6 +157,7 @@ def main():
     else:
         plan["rationale"] = "llm"
 
+    # normalize
     uniq = []
     seen = set()
     for s in plan["subreddits"]:
