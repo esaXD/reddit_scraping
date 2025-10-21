@@ -86,15 +86,14 @@ jobs:
           MONTHS_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['months'])")
           MIN_UPVOTES_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['min_upvotes'])")
           LIMIT_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['limit'])")
-          KEYWORDS_P=$(python -c "import json;print(' '.join(json.load(open('data/plan.json'))['filters'].get('keywords', [])))")
           REPORT_TYPE_P=$(python -c "import json;print(json.load(open('data/plan.json'))['report_type'])")
 
           echo "SUBS=${SUBS}" >> $GITHUB_ENV
           echo "MONTHS=${MONTHS_P}" >> $GITHUB_ENV
           echo "MIN_UPVOTES=${MIN_UPVOTES_P}" >> $GITHUB_ENV
           echo "LIMIT=${LIMIT_P}" >> $GITHUB_ENV
-          echo "KEYWORDS=${KEYWORDS_P}" >> $GITHUB_ENV
           echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
+          # NOTE: KEYWORDS'ı şimdilik export etmiyoruz (filtre adımını sonra ekleyeceğiz)
 
       - name: Scrape
         env:
@@ -110,16 +109,6 @@ jobs:
             --min-upvotes ${MIN_UPVOTES} \
             --limit ${LIMIT} \
             --out data/raw.jsonl
-
-      - name: Keyword filter (optional)
-        if: ${{ env.KEYWORDS != '' }}
-        env:
-          KEYWORDS: ${{ env.KEYWORDS }}
-        run: |
-          python pipeline/filter_keywords.py \
-            --in data/raw.jsonl \
-            --out data/raw.jsonl \
-            --keywords ${KEYWORDS}
 
       - name: Analyze
         run: |
