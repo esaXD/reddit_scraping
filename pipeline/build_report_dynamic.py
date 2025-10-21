@@ -1,6 +1,7 @@
-# pipeline/build_report_dynamic.py
+# pipeline/build_report_dynamic.py  (yalnızca değişen kısım)
 import argparse, json, markdown, pandas as pd
 from util import ensure_dirs
+import os
 
 TPL = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reddit Research Report</title>
@@ -17,6 +18,7 @@ a:hover {{text-decoration:underline}}
 <b>Subreddits:</b> {subs}<br/><b>Params:</b> months={months}, min_upvotes={minup}, limit={limit}<br/><b>Keywords:</b> {keywords}<br/>
 <b>Report type:</b> {rtype}
 </div></div>
+{summary_html}
 <h2>Pain Map</h2><div class="box">{pain}</div>
 {extra}
 </body></html>"""
@@ -31,6 +33,7 @@ def main():
     ap.add_argument("--plan", required=True)
     ap.add_argument("--pain-map", required=True)
     ap.add_argument("--analysis", required=True)
+    ap.add_argument("--summary", required=False)   # ✅ yeni
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
@@ -38,7 +41,11 @@ def main():
     pain = md_to_html(a.pain_map)
     df = pd.read_parquet(a.analysis)
 
-    # İsteğe göre ekstra bölüm (örnek: sentiment raporu)
+    # Executive Summary (opsiyonel)
+    summary_html = ""
+    if a.summary and os.path.exists(a.summary):
+        summary_html = f"<h2>Executive Summary</h2><div class='box'>{md_to_html(a.summary)}</div>"
+
     extra = ""
     if plan.get("report_type") == "sentiment":
         avg = float(df["sentiment"].mean()) if "sentiment" in df.columns and len(df) else 0.0
@@ -53,6 +60,7 @@ def main():
         rtype=plan.get("report_type", "auto"),
         pain=pain,
         extra=extra,
+        summary_html=summary_html,
     )
     ensure_dirs(a.out)
     with open(a.out, "w", encoding="utf-8") as f:
