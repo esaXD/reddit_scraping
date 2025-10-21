@@ -95,26 +95,30 @@ jobs:
           echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
           # NOTE: keywords filtresini şimdilik export etmiyoruz
 
-      - name: Scrape
-        env:
-          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
-          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
-          REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
+      - name: Validate subreddits
         run: |
-          echo "Planned subreddits: ${SUBS}"
+          python pipeline/validate_subs.py --in data/plan.json --out subs.txt --limit ${{ github.event.inputs.max_subs }}
+          echo "SUBS=$(cat subs.txt)" >> $GITHUB_ENV
+          echo "Validated subs: $(cat subs.txt)"
+
+
+      - name: Scrape
+        run: |
+          echo "Using subs: ${SUBS}"
           python pipeline/scrape_reddit.py \
             --subs ${SUBS} \
             --months ${MONTHS} \
             --min-upvotes ${MIN_UPVOTES} \
             --limit ${LIMIT} \
+            --keywords ${{ github.event.inputs.keywords }} \
             --out data/raw.jsonl
+
 
       - name: Quick count
         run: |
-          echo "JSONL lines:"
-          wc -l data/raw.jsonl || true
-          echo "First 3 lines:"
-          head -n 3 data/raw.jsonl || true
+          echo "JSONL lines:"; (wc -l data/raw.jsonl || true)
+          echo "First 3 lines:"; (head -n 3 data/raw.jsonl || true)
+
 
       - name: Keyword filter (optional)
         if: ${{ github.event.inputs.keywords != '' }}
