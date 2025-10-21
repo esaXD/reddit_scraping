@@ -95,7 +95,7 @@ jobs:
           echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
           # NOTE: keywords filtresini şimdilik export etmiyoruz
 
-            - name: Scrape
+      - name: Scrape
         env:
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
