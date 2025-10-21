@@ -105,6 +105,11 @@ jobs:
         run: |
           python pipeline/patch_plan_subs.py --plan data/plan.json --subs-file subs.txt
 
+      - name: Patch plan with validated subs
+        run: |
+          python pipeline/patch_plan_subs.py --plan data/plan.json --subs-file subs.txt
+
+
 
 
       - name: Scrape
@@ -145,13 +150,23 @@ jobs:
             --out data/analysis.parquet \
             --report reports/pain_map.md
 
+      - name: LLM executive summary (optional)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python pipeline/llm_summary.py --plan data/plan.json --analysis data/analysis.parquet --out reports/summary.md || echo "skip"
+
+
       - name: Build report
         run: |
           python pipeline/build_report_dynamic.py \
             --plan data/plan.json \
             --pain-map reports/pain_map.md \
             --analysis data/analysis.parquet \
+            --summary reports/summary.md \
             --out public/index.html
+
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
