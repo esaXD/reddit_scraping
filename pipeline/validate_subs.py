@@ -17,31 +17,31 @@ def via_praw(candidates):
         name = sr.replace("r/","")
         try:
             s = reddit.subreddit(name)
-            if getattr(s, "over18", False): 
+            if getattr(s, "over18", False):
                 continue
             subs = getattr(s, "subscribers", 0) or 0
             if subs < 10000:
                 continue
-            good.append("r/"+s.display_name)
+            good.append("r/" + s.display_name)
             time.sleep(0.2)
         except Exception:
             continue
     return good
 
-# Çok temel bir kara liste ve pozitif liste
 NEG = { "r/Apps", "r/technology", "r/health", "r/fitness", "r/all", "r/popular", "r/AskReddit" }
-POS = [ "r/meditation","r/Meditation","r/mindfulness","r/digitalminimalism","r/NoSurf",
-        "r/selfimprovement","r/productivity","r/GetDisciplined","r/Anxiety","r/DecidingToBeBetter" ]
+POS = [
+    "r/meditation","r/Meditation","r/mindfulness","r/digitalminimalism","r/NoSurf",
+    "r/selfimprovement","r/productivity","r/GetDisciplined","r/Anxiety","r/DecidingToBeBetter"
+]
 
 def heuristic_clean(candidates, limit=8):
-    out = []
-    seen = set()
+    out, seen = [], set()
     for s in candidates + POS:
-        s = "r/"+s.split("/")[-1]
-        if s in NEG: 
+        s = "r/" + s.split("/")[-1]
+        if s in NEG:
             continue
         key = s.lower()
-        if key in seen: 
+        if key in seen:
             continue
         seen.add(key)
         out.append(s)
@@ -51,19 +51,19 @@ def heuristic_clean(candidates, limit=8):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--in", required=True)   # plan.json
-    ap.add_argument("--out", required=True)  # cleaned_subs.txt
+    ap.add_argument("--in", dest="in_path", required=True)   # <-- dest ile rezerve kelimeyi aş
+    ap.add_argument("--out", dest="out_path", required=True)
     ap.add_argument("--limit", type=int, default=8)
     a = ap.parse_args()
 
-    plan = json.load(open(a.in, "r", encoding="utf-8"))
+    plan = json.load(open(a.in_path, "r", encoding="utf-8"))
     cand = plan.get("subreddits", [])[: a.limit]
-    # 1) PRAW ile doğrula (varsa)
+
     good = via_praw(cand)
     if not good:
-        # 2) Heuristik temizle
         good = heuristic_clean(cand, a.limit)
-    with open(a.out, "w", encoding="utf-8") as f:
+
+    with open(a.out_path, "w", encoding="utf-8") as f:
         f.write(" ".join(good))
     print("Validated subs:", " ".join(good))
 
