@@ -29,14 +29,13 @@ def via_praw(candidates):
     return good
 
 NEG = { "r/Apps", "r/technology", "r/health", "r/fitness", "r/all", "r/popular", "r/AskReddit" }
-POS = [
-    "r/meditation","r/Meditation","r/mindfulness","r/digitalminimalism","r/NoSurf",
-    "r/selfimprovement","r/productivity","r/GetDisciplined","r/Anxiety","r/DecidingToBeBetter"
-]
 
 def heuristic_clean(candidates, limit=8):
+    """
+    Deduplicate and cap candidate subreddits without pulling in unrelated defaults.
+    """
     out, seen = [], set()
-    for s in candidates + POS:
+    for s in candidates:
         s = "r/" + s.split("/")[-1]
         if s in NEG:
             continue
