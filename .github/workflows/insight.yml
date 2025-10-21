@@ -1,0 +1,79 @@
+name: insight
+on:
+  workflow_dispatch:
+    inputs:
+      subreddits:
+        description: "Space-separated (r/meditation r/selfimprovement ...)"
+        required: true
+        default: "r/meditation r/selfimprovement r/lifehacks r/wellness r/coaching r/productivity r/anxiety"
+      months: { description: "Months back", required: true, default: "12" }
+      min_upvotes: { description: "Min upvotes", required: true, default: "20" }
+      limit: { description: "Per-subreddit cap", required: true, default: "1000" }
+      use_pushshift: { description: "Use Pushshift (true/false)", required: true, default: "true" }
+      keywords: { description: "Optional keywords", required: false, default: "" }
+permissions: { contents: write, pages: write, id-token: write }
+concurrency: { group: "pages", cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+      - name: Export inputs
+        run: |
+          echo "SUBS=${{ github.event.inputs.subreddits }}" >> $GITHUB_ENV
+          echo "MONTHS=${{ github.event.inputs.months }}" >> $GITHUB_ENV
+          echo "MIN_UPVOTES=${{ github.event.inputs.min_upvotes }}" >> $GITHUB_ENV
+          echo "LIMIT=${{ github.event.inputs.limit }}" >> $GITHUB_ENV
+          echo "USE_PUSHSHIFT=${{ github.event.inputs.use_pushshift }}" >> $GITHUB_ENV
+          echo "KEYWORDS=${{ github.event.inputs.keywords }}" >> $GITHUB_ENV
+      - name: Scrape
+        env:
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
+        run: |
+          mkdir -p data reports public
+          if [ "${USE_PUSHSHIFT}" = "true" ]; then
+            python pipeline/scrape_reddit.py --use-pushshift --subs ${SUBS} --months ${MONTHS} --min-upvotes ${MIN_UPVOTES} --limit ${LIMIT} --out data/raw.jsonl
+          else
+            python pipeline/scrape_reddit.py --subs ${SUBS} --months ${MONTHS} --min-upvotes ${MIN_UPVOTES} --limit ${LIMIT} --out data/raw.jsonl
+          fi
+          if [ -n "${KEYWORDS}" ]; then
+            python - << 'PY'
+import json, os
+kw = os.environ.get("KEYWORDS","").split()
+inp = "data/raw.jsonl"; outp = "data/filtered.jsonl"
+with open(inp, "r", encoding="utf-8") as f, open(outp, "w", encoding="utf-8") as g:
+    for line in f:
+        d = json.loads(line)
+        txt = (d.get("title","") + " " + d.get("selftext","")).lower()
+        if all(k.lower() in txt for k in kw): g.write(json.dumps(d, ensure_ascii=False) + "\\n")
+os.replace(outp, inp)
+PY
+          fi
+      - name: Analyze
+        run: python pipeline/analyze.py --in data/raw.jsonl --out data/analysis.parquet --report reports/pain_map.md
+      - name: Generate ideas
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python pipeline/generate_ideas.py --analysis data/analysis.parquet --out reports/product_ideas.md
+      - name: Build HTML
+        run: python pipeline/build_report.py --pain-map reports/pain_map.md --ideas reports/product_ideas.md --out public/index.html
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with: { path: public }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: ${{ steps.deployment.outputs.page_url }} }
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
