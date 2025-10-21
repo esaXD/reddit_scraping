@@ -137,7 +137,10 @@ def main():
     ensure_dirs(a.out)
     since = month_ago_utc(a.months)
 
-    rows = pushshift_by_subs(a.subs, since, a.limit, a.min_upvotes)
+    rows_subs = pushshift_by_subs(a.subs, since, a.limit, a.min_upvotes)
+rows_kw = pushshift_by_keywords(a.keywords, since, a.limit, a.min_upvotes) if a.keywords else []
+rows = rows_subs + rows_kw
+
     # Sub’lardan hiç gelmezse keyword ile tüm reddit araması
     if not rows and a.keywords:
         rows = pushshift_by_keywords(a.keywords, since, a.limit, a.min_upvotes)
