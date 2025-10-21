@@ -82,7 +82,6 @@ jobs:
             --keywords "${KEYWORDS}" \
             --out data/plan.json
 
-          # ⬇️ YAML-safe export (python -c; hiçbir heredoc yok)
           SUBS=$(python -c "import json;print(' '.join(json.load(open('data/plan.json'))['subreddits']))")
           MONTHS_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['months'])")
           MIN_UPVOTES_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['min_upvotes'])")
@@ -117,16 +116,10 @@ jobs:
         env:
           KEYWORDS: ${{ env.KEYWORDS }}
         run: |
-          python - <<'PY'
-import json, os
-kw = os.environ.get("KEYWORDS","").split()
-inp = "data/raw.jsonl"; outp = "data/filtered.jsonl"
-with open(inp,"r",encoding="utf-8") as f, open(outp,"w",encoding="utf-8") as g:
-    for line in f:
-        d = json.loads(line); txt = (d.get("title","")+" "+d.get("selftext","")).lower()
-        if all(k.lower() in txt for k in kw): g.write(json.dumps(d, ensure_ascii=False)+"\n")
-os.replace(outp, inp); print("Applied keywords:", kw)
-PY
+          python pipeline/filter_keywords.py \
+            --in data/raw.jsonl \
+            --out data/raw.jsonl \
+            --keywords ${KEYWORDS}
 
       - name: Analyze
         run: |
