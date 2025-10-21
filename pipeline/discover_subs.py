@@ -253,6 +253,41 @@ def build_search_queries(prompt: str, keywords: str, max_terms: int = 16):
     return uniq
 
 
+FALLBACK_SUBS = {
+    "physiognomy": ["r/physiognomy", "r/faceanalysis", "r/bodylanguage"],
+    "face": ["r/physiognomy", "r/faceanalysis", "r/AskPsychology"],
+    "mobile": ["r/MobileApps", "r/AppIdeas", "r/androiddev", "r/iOSProgramming"],
+    "ux": ["r/userexperience", "r/UXResearch", "r/UXDesign", "r/userexperience_design"],
+    "product": ["r/ProductManagement", "r/ProductDesign", "r/ProductMarketing"],
+    "security": ["r/cybersecurity", "r/techsupport", "r/netsecstudents"],
+    "innovation": ["r/Futurology", "r/startups", "r/Entrepreneur"],
+}
+
+
+def fallback_subreddits(prompt: str, keywords: str, limit: int = 8):
+    terms = english_keywords(prompt, keywords)
+    tokens = set()
+    for term in terms:
+        tokens.add(term.casefold())
+        tokens.update(term.casefold().split())
+    tokens = {t for t in tokens if t}
+
+    curated = []
+    seen = set()
+    for token in tokens:
+        for key, subs in FALLBACK_SUBS.items():
+            if key in token:
+                for sub in subs:
+                    norm = "r/" + sub.split("/")[-1]
+                    if norm.lower() in seen:
+                        continue
+                    seen.add(norm.lower())
+                    curated.append(norm)
+                    if len(curated) >= limit:
+                        return curated
+    return curated[:limit]
+
+
 def build_search_terms(prompt: str, keywords: str, max_terms: int = 16):
     queries = build_search_queries(prompt, keywords, max_terms)
     return queries[0] if queries else []
@@ -291,6 +326,10 @@ def discover(prompt, keywords, months=12, max_subs=8, pages=8, page_size=100):
             break
 
     if not subs:
+        fallback = fallback_subreddits(prompt, keywords, max_subs)
+        if fallback:
+            print("[discover] Fallback curated subs:", " ".join(fallback))
+            return fallback
         return []
 
     top = []
