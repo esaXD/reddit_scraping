@@ -26,18 +26,20 @@ def scrape_pushshift(subs: List[str], since_utc: int, limit: int, min_upvotes: i
             "after": since_utc,
             "size": size,
             "sort": "desc",
-            "sort_type": "score",
+            "sort_type": "created_utc",  # ✅ zaman bazlı sırala
         }
         fetched = 0
         while fetched < limit:
             try:
                 r = requests.get(base, params=params, timeout=30)
                 r.raise_for_status()
-                data = r.json().get("data", [])
+                payload = r.json()
+                data = payload.get("data", [])
                 if not data:
                     break
 
                 for d in data:
+                    # eşik
                     if d.get("score", 0) < min_upvotes:
                         continue
                     out.append({
@@ -54,20 +56,22 @@ def scrape_pushshift(subs: List[str], since_utc: int, limit: int, min_upvotes: i
                     })
 
                 fetched += len(data)
-                # stop if we’ve reached the per-subreddit cap
                 if fetched >= limit:
                     break
 
-                # try to paginate backwards by last item's created_utc
-                last = data[-1].get("created_utc")
-                if last:
-                    params["before"] = last
+                # sıradaki sayfa için: en son kaydın created_utc'sini "before" olarak kullan
+                last_ts = data[-1].get("created_utc")
+                if not last_ts:
+                    break
+                params["before"] = last_ts
+                # 'after' sabit kalsın; before ile geri doğru ilerliyoruz
                 time.sleep(0.6)
             except Exception as e:
                 print("pushshift error:", e, file=sys.stderr)
                 time.sleep(2)
                 break
     return out
+
 
 def scrape_reddit_api(subs: List[str], since_utc: int, limit: int, min_upvotes: int):
     if not praw:
