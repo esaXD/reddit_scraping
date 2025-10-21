@@ -95,6 +95,38 @@ jobs:
           echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
           # NOTE: keywords filtresini şimdilik export etmiyoruz
 
+      - name: Discover subreddits from prompt/keywords
+        env:
+          USER_PROMPT: ${{ github.event.inputs.user_prompt }}
+          KEYWORDS: ${{ github.event.inputs.keywords }}
+          MONTHS: ${{ github.event.inputs.months }}
+          MAX_SUBS: ${{ github.event.inputs.max_subs }}
+        run: |
+          python pipeline/discover_subs.py \
+            --prompt "${USER_PROMPT}" \
+            --keywords "${KEYWORDS}" \
+            --months ${MONTHS} \
+            --max-subs ${MAX_SUBS} \
+            --out subs.txt
+          echo "SUBS=$(cat subs.txt)" >> $GITHUB_ENV
+          echo "Discovered subs: $(cat subs.txt)"
+
+      - name: Patch plan with discovered subs
+        run: |
+          python - <<'PY'
+import json
+plan = json.load(open("data/plan.json","r",encoding="utf-8"))
+subs = open("subs.txt","r",encoding="utf-8").read().strip().split()
+if subs:
+    plan["subreddits"] = subs
+    with open("data/plan.json","w",encoding="utf-8") as f:
+        json.dump(plan,f,ensure_ascii=False,indent=2)
+    print("Patched plan with discovered subs:", " ".join(subs))
+else:
+    print("No discovered subs; keeping original plan.")
+PY
+
+
       - name: Validate subreddits
         run: |
           python pipeline/validate_subs.py --in data/plan.json --out subs.txt --limit ${{ github.event.inputs.max_subs }}
