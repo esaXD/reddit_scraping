@@ -3,6 +3,7 @@ import os
 import json
 import re
 import argparse
+from discover_subs import english_keywords
 
 SYSTEM = "You plan Reddit research. Return strict JSON only."
 USER_TMPL = """Prompt: {prompt}
@@ -33,6 +34,27 @@ def is_non_english(s: str) -> bool:
         return False
     tr = set("çğıöşüÇĞİÖŞÜ")
     return any((ord(ch) > 127) or (ch in tr) for ch in s)
+
+def _prepare_keywords(raw_keywords) -> list:
+    if not raw_keywords:
+        return []
+    if isinstance(raw_keywords, (list, tuple)):
+        parts = []
+        for item in raw_keywords:
+            if item is None:
+                continue
+            s = str(item).strip()
+            if not s:
+                continue
+            if " " in s:
+                parts.append(f'"{s}"')
+            else:
+                parts.append(s)
+        joined = " ".join(parts)
+    else:
+        joined = str(raw_keywords)
+    return english_keywords("", joined)
+
 
 def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
     words = norm(prompt).split()
@@ -76,7 +98,7 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
     return {
         "subreddits": subs,
         "params": {"months": int(m), "min_upvotes": int(u), "limit": int(lim)},
-        "filters": {"keywords": (keywords.split() if keywords else [])},
+        "filters": {"keywords": _prepare_keywords(keywords)},
         "report_type": report_type,
     }
 
@@ -156,6 +178,13 @@ def main():
         plan["rationale"] = "heuristic"
     else:
         plan["rationale"] = "llm"
+
+    existing_kw = plan.get("filters", {}).get("keywords")
+    canonical_kw = _prepare_keywords(existing_kw) or _prepare_keywords(a.keywords)
+    if canonical_kw:
+        plan.setdefault("filters", {})["keywords"] = canonical_kw
+    else:
+        plan.pop("filters", None)
 
     # normalize
     uniq = []

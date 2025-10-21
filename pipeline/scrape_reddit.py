@@ -7,7 +7,7 @@ from typing import List
 from datetime import datetime, timedelta
 import requests
 from util import ensure_dirs, save_jsonl, clean_text, now_iso
-from discover_subs import build_keywords, build_search_terms, ASCII_FALLBACK
+from discover_subs import english_keywords, build_search_terms, ASCII_FALLBACK
 
 BASE = "https://api.pullpush.io/reddit/search/submission/"  # PullPush mirror
 
@@ -142,7 +142,7 @@ def main():
     # Subreddit sonuçları + keyword sonuçları = birleşim
     prompt_text = a.prompt or ""
     keyword_input = " ".join(a.keywords or [])
-    keyword_variants = build_keywords(prompt_text, keyword_input)
+    keyword_variants = english_keywords(prompt_text, keyword_input)
     search_terms = build_search_terms(prompt_text, keyword_input) if (prompt_text or keyword_input) else []
 
     rows_subs = pushshift_by_subs(a.subs, since, a.limit, a.min_upvotes)

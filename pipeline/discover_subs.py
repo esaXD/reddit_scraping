@@ -42,6 +42,8 @@ SYNONYM_MAP = {
     _normalize_lookup("uygulama"): ["app", "application", "mobile app"],
     _normalize_lookup("uygulama özellikler"): ["app features", "feature set", "product requirements"],
     _normalize_lookup("özellikler"): ["features", "feature set"],
+    _normalize_lookup("kullanıcı"): ["user", "users"],
+    _normalize_lookup("deneyimi"): ["experience", "user experience"],
     _normalize_lookup("kullanıcı deneyimi"): ["user experience", "ux", "ux research", "ux design"],
     _normalize_lookup("tasarım"): ["design", "app design", "ui design", "ux design"],
     _normalize_lookup("performans"): ["performance", "app performance", "performance optimization"],
@@ -79,11 +81,14 @@ def tokens(text: str):
 def _expand_keywords(keywords):
     expanded, seen = [], set()
     for kw in keywords:
-        variants = [kw, kw.translate(ASCII_FALLBACK)]
+        base_forms = [kw, kw.translate(ASCII_FALLBACK)]
+        variants = []
         lookup_keys = {_normalize_lookup(kw), _normalize_lookup(kw.translate(ASCII_FALLBACK))}
         for lk in lookup_keys:
             if lk and lk in SYNONYM_MAP:
                 variants.extend(SYNONYM_MAP[lk])
+        if not variants:
+            variants = base_forms
         for cand in variants:
             cand = cand.strip()
             if len(cand) < 3:
@@ -129,8 +134,34 @@ def build_keywords(prompt: str, keywords: str):
     return _expand_keywords(base_keywords)
 
 
-def build_search_terms(prompt: str, keywords: str, max_terms: int = 16):
+def english_keywords(prompt: str, keywords: str):
     expanded = build_keywords(prompt, keywords)
+    english, seen = [], set()
+    for kw in expanded:
+        ascii_kw = kw.encode("ascii", "ignore").decode().strip()
+        if not ascii_kw:
+            continue
+        if ascii_kw.lower() in seen:
+            continue
+        seen.add(ascii_kw.lower())
+        english.append(ascii_kw)
+    if english:
+        return english
+
+    for tok in tokens(prompt) + tokens(keywords):
+        ascii_tok = tok.translate(ASCII_FALLBACK).encode("ascii", "ignore").decode().strip()
+        if not ascii_tok:
+            continue
+        key = ascii_tok.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        english.append(ascii_tok)
+    return english
+
+
+def build_search_terms(prompt: str, keywords: str, max_terms: int = 16):
+    expanded = english_keywords(prompt, keywords)
     if not expanded:
         return []
     terms = [f'"{kw}"' if " " in kw else kw for kw in expanded[:max_terms]]

@@ -1,4 +1,5 @@
 import argparse, json, shlex
+from discover_subs import english_keywords
 
 def parse_keywords(raw: str):
     # tırnaklı ifadeleri tek anahtar olarak almak için shlex
@@ -18,7 +19,8 @@ def main():
     ap.add_argument("--mode", choices=["any","all"], default="any")
     args = ap.parse_args()
 
-    kws = [k.casefold() for k in parse_keywords(args.keywords)]
+    kws_raw = parse_keywords(args.keywords)
+    kws = [k.casefold() for k in english_keywords("", " ".join(kws_raw))]
     if not kws:
         # no-op copy
         with open(args.in_path, "r", encoding="utf-8") as f, open(args.out_path, "w", encoding="utf-8") as g:

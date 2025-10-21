@@ -1,0 +1,22 @@
+{
+  "subreddits": [],
+  "params": {
+    "months": 12,
+    "min_upvotes": 20,
+    "limit": 1000
+  },
+  "filters": {
+    "keywords": [
+      "physiognomy",
+      "face reading",
+      "face analysis",
+      "mobile",
+      "mobile app",
+      "mobile application",
+      "app",
+      "application"
+    ]
+  },
+  "report_type": "faq",
+  "rationale": "heuristic"
+}
