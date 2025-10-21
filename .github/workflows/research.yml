@@ -114,17 +114,17 @@ jobs:
       - name: Patch plan with discovered subs
         run: |
           python - <<'PY'
-import json
-plan = json.load(open("data/plan.json","r",encoding="utf-8"))
-subs = open("subs.txt","r",encoding="utf-8").read().strip().split()
-if subs:
-    plan["subreddits"] = subs
-    with open("data/plan.json","w",encoding="utf-8") as f:
-        json.dump(plan,f,ensure_ascii=False,indent=2)
-    print("Patched plan with discovered subs:", " ".join(subs))
-else:
-    print("No discovered subs; keeping original plan.")
-PY
+          import json
+          plan = json.load(open("data/plan.json","r",encoding="utf-8"))
+          subs = open("subs.txt","r",encoding="utf-8").read().strip().split()
+          if subs:
+              plan["subreddits"] = subs
+              with open("data/plan.json","w",encoding="utf-8") as f:
+                  json.dump(plan,f,ensure_ascii=False,indent=2)
+              print("Patched plan with discovered subs:", " ".join(subs))
+          else:
+              print("No discovered subs; keeping original plan.")
+          PY
 
 
       - name: Validate subreddits
@@ -157,6 +157,7 @@ PY
 
 
 
+
       - name: Quick count
         run: |
           echo "JSONL lines:"; (wc -l data/raw.jsonl || true)
@@ -172,6 +173,7 @@ PY
             --out data/raw.jsonl \
             --keywords "${{ github.event.inputs.keywords }}" \
             --mode any
+
 
 
 
