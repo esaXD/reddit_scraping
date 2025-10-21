@@ -41,9 +41,6 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
         if w in CURATED:
             subs += CURATED[w]
 
-    if is_non_english(prompt) or is_non_english(keywords):
-        subs = ["r/Meditation", "r/mindfulness", "r/selfimprovement", "r/digitalminimalism", "r/NoSurf"]
-
     if not subs:
         subs = ["r/AskReddit", "r/all", "r/popular"]
 
