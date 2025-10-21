@@ -19,6 +19,12 @@ CURATED = {
   "productivity": ["r/productivity","r/selfimprovement","r/GetDisciplined","r/lifehacks"],
 }
 def norm(s): return re.sub(r"[^a-z0-9\s]", " ", s.lower()).strip()
+
+def is_non_english(s: str) -> bool:
+    # kaba sezgi: ASCII dışı veya belirgin TR karakterleri
+    tr = set("çğıöşüÇĞİÖŞÜ")
+    return any(ord(ch) > 127 or ch in tr for ch in s)
+  
 def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
     words = norm(prompt).split(); subs=[]
     for w in words:
@@ -32,6 +38,13 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
         elif any(w in words for w in ["sentiment","opinion","review"]): report_type="sentiment"
         elif any(w in words for w in ["idea","ideation","pg"]): report_type="ideation"
         else: report_type="faq"
+
+  if is_non_english(prompt) or is_non_english(keywords):
+        subs = ["r/Meditation","r/mindfulness","r/selfimprovement","r/digitalminimalism","r/NoSurf"]
+
+    if not subs:
+        subs = ["r/AskReddit","r/all","r/popular"]
+      
     return {"subreddits": subs, "params":{"months":int(m),"min_upvotes":int(u),"limit":int(lim)}, "filters":{"keywords": keywords.split() if keywords else []}, "report_type": report_type}
 def call_openai(system, user):
     try:
