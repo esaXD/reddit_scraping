@@ -109,6 +109,14 @@ jobs:
             --limit ${LIMIT} \
             --out data/raw.jsonl
 
+      - name: Quick count
+        run: |
+          echo "JSONL lines:"
+          wc -l data/raw.jsonl || true
+          echo "First 3 lines:"
+          head -n 3 data/raw.jsonl || true
+
+
 
       - name: Analyze
         run: |
