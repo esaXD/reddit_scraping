@@ -116,6 +116,15 @@ jobs:
           echo "First 3 lines:"
           head -n 3 data/raw.jsonl || true
 
+      - name: Keyword filter (optional)
+        if: ${{ github.event.inputs.keywords != '' }}
+        run: |
+          python pipeline/filter_keywords.py \
+            --in data/raw.jsonl \
+            --out data/raw.jsonl \
+            --keywords ${{ github.event.inputs.keywords }}
+
+
 
 
       - name: Analyze
