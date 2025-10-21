@@ -41,8 +41,9 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
         if w in CURATED:
             subs += CURATED[w]
 
-    if not subs:
-        subs = ["r/AskReddit", "r/all", "r/popular"]
+        if not subs:
+        subs = []  # boş kalsın; discovery dolduracak
+
 
     if report_type == "auto":
         if any(w in words for w in ["market", "pricing", "monetization"]):
