@@ -9,12 +9,12 @@ Report type hint: {report_type}
 Max subreddits: {max_subs}
 Defaults: months={def_months}, min_upvotes={def_min}, limit={def_limit}
 Schema:
-{
+{{
   "subreddits": ["r/...", "..."],
-  "params": {"months": int, "min_upvotes": int, "limit": int},
-  "filters": {"keywords": ["..."]},
+  "params": {{"months": 12, "min_upvotes": 20, "limit": 1000}},
+  "filters": {{"keywords": ["..."]}},
   "report_type": "market|competitor|trend|sentiment|ideation|faq"
-}"""
+}}"""
 
 CURATED = {
     "ai": ["r/MachineLearning", "r/artificial", "r/LocalLLaMA", "r/datascience"],
@@ -28,7 +28,6 @@ def norm(s: str) -> str:
     return re.sub(r"[^a-z0-9\s]", " ", (s or "").lower()).strip()
 
 def is_non_english(s: str) -> bool:
-    # kaba tespit: ASCII dışı veya belirgin TR karakterleri
     if not s:
         return False
     tr = set("çğıöşüÇĞİÖŞÜ")
@@ -38,20 +37,16 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
     words = norm(prompt).split()
     subs = []
 
-    # Anahtar kelimeye göre curated eşleştirme
     for w in words:
         if w in CURATED:
             subs += CURATED[w]
 
-    # Türkçe / non-English tespiti -> tematik, derli toplu SR listesi
     if is_non_english(prompt) or is_non_english(keywords):
         subs = ["r/Meditation", "r/mindfulness", "r/selfimprovement", "r/digitalminimalism", "r/NoSurf"]
 
-    # Hiçbir şey bulunamadıysa genel fallback
     if not subs:
         subs = ["r/AskReddit", "r/all", "r/popular"]
 
-    # Report type otomatik seçimi
     if report_type == "auto":
         if any(w in words for w in ["market", "pricing", "monetization"]):
             report_type = "market"
@@ -66,7 +61,6 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
         else:
             report_type = "faq"
 
-    # uniq + kes
     uniq = []
     seen = set()
     for s in subs:
@@ -161,7 +155,6 @@ def main():
     else:
         plan["rationale"] = "llm"
 
-    # normalize
     uniq = []
     seen = set()
     for s in plan["subreddits"]:
