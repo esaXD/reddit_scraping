@@ -94,6 +94,21 @@ jobs:
           echo "LIMIT=${LIMIT_P}" >> $GITHUB_ENV
           echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
           # NOTE: keywords filtresini şimdilik export etmiyoruz
+      - name: Test Reddit API health
+        env:
+          USER_PROMPT: ${{ github.event.inputs.user_prompt }}
+          KEYWORDS: ${{ github.event.inputs.keywords }}
+          MONTHS: ${{ github.event.inputs.months }}
+          MAX_SUBS: ${{ github.event.inputs.max_subs }}
+        run: |
+          python pipeline/test_reddit_api.py \
+            --prompt "${USER_PROMPT}" \
+            --keywords "${KEYWORDS}" \
+            --subs "${SUBS}" \
+            --months ${MONTHS} \
+            --max-subs ${MAX_SUBS}
+          echo "Diagnostics:"
+          cat data/api_diagnostics.json
 
       - name: Discover subreddits from prompt/keywords
         env:
@@ -147,6 +162,9 @@ jobs:
       - name: Scrape
         run: |
           echo "Using subs: ${SUBS}"
+          if [ "${REDDIT_API_STATUS}" = "degraded" ]; then
+            echo "WARNING: Reddit API health degraded; scrape may fail due to upstream issues."
+          fi
           python pipeline/scrape_reddit.py \
             --subs ${SUBS} \
             --months ${MONTHS} \

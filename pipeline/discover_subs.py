@@ -85,7 +85,7 @@ def _req(params, retry=3, sleep=0.5):
     return []
 
 
-def discover(prompt, keywords, months=12, max_subs=8, pages=8, page_size=100):
+def build_keywords(prompt: str, keywords: str):
     toks = tokens(prompt) + tokens(keywords)
     base_keywords, seen = [], set()
     for tok in toks:
@@ -95,12 +95,19 @@ def discover(prompt, keywords, months=12, max_subs=8, pages=8, page_size=100):
             continue
         seen.add(tok)
         base_keywords.append(tok)
+    return _expand_keywords(base_keywords)
 
-    keywords = _expand_keywords(base_keywords)
-    if not keywords:
+
+def build_search_terms(prompt: str, keywords: str, max_terms: int = 16):
+    expanded = build_keywords(prompt, keywords)
+    if not expanded:
         return []
+    terms = ['"{kw}"' if " " in kw else kw for kw in expanded[:max_terms]]
+    return terms
 
-    terms = ['"{kw}"' if " " in kw else kw for kw in keywords[:16]]
+
+def discover(prompt, keywords, months=12, max_subs=8, pages=8, page_size=100):
+    terms = build_search_terms(prompt, keywords)
     query = " OR ".join(terms)
     if not query:
         return []

@@ -1,0 +1,31 @@
+{
+  "checks": [
+    {
+      "label": "search_query",
+      "url": "https://api.pullpush.io/reddit/search/submission/?q=ilmi+OR+sima+OR+mobil+OR+uygulamas%C4%B1nda+OR+uygulamasinda+OR+gerekenler&after=1729944210&size=25&sort=desc&sort_type=created_utc",
+      "status": 200,
+      "ok": true,
+      "elapsed_sec": 1.996,
+      "items": 0,
+      "body_preview": ""
+    },
+    {
+      "label": "subreddit:Android",
+      "url": "https://api.pullpush.io/reddit/search/submission/?subreddit=Android&after=1729944212&size=25&sort=desc&sort_type=created_utc",
+      "status": 200,
+      "ok": true,
+      "elapsed_sec": 1.312,
+      "items": 25,
+      "body_preview": ""
+    },
+    {
+      "label": "subreddit:iOS",
+      "url": "https://api.pullpush.io/reddit/search/submission/?subreddit=iOS&after=1729944213&size=25&sort=desc&sort_type=created_utc",
+      "status": 200,
+      "ok": true,
+      "elapsed_sec": 1.075,
+      "items": 25,
+      "body_preview": ""
+    }
+  ]
+}
