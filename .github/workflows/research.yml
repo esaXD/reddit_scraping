@@ -93,7 +93,7 @@ jobs:
           echo "MIN_UPVOTES=${MIN_UPVOTES_P}" >> $GITHUB_ENV
           echo "LIMIT=${LIMIT_P}" >> $GITHUB_ENV
           echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
-          # NOTE: KEYWORDS'ı şimdilik export etmiyoruz (filtre adımını sonra ekleyeceğiz)
+          # NOTE: keywords filtresini şimdilik export etmiyoruz
 
       - name: Scrape
         env:
@@ -109,15 +109,6 @@ jobs:
             --min-upvotes ${MIN_UPVOTES} \
             --limit ${LIMIT} \
             --out data/raw.jsonl
-
-                  - name: Keyword filter (optional)
-        if: ${{ github.event.inputs.keywords != '' }}
-        run: |
-          python pipeline/filter_keywords.py \
-            --in data/raw.jsonl \
-            --out data/raw.jsonl \
-            --keywords ${{ github.event.inputs.keywords }}
-
 
       - name: Analyze
         run: |
