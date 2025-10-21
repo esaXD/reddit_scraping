@@ -9,24 +9,8 @@ on:
         default: "Market analysis: meditation apps and doomscrolling"
       report_type:
         description: "auto|market|competitor|trend|sentiment|ideation|faq"
-        required: true
+        required: false
         default: "auto"
-      max_subs:
-        description: "Max subreddits"
-        required: true
-        default: "8"
-      months:
-        description: "Default months (planner may override)"
-        required: true
-        default: "12"
-      min_upvotes:
-        description: "Default min upvotes"
-        required: true
-        default: "20"
-      limit:
-        description: "Default per-subreddit cap"
-        required: true
-        default: "1000"
       keywords:
         description: "Optional keyword filter"
         required: false
@@ -44,6 +28,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DEFAULT_MAX_SUBS: "8"
+      DEFAULT_MONTHS: "12"
+      DEFAULT_MIN_UPVOTES: "20"
+      DEFAULT_LIMIT: "1000"
     steps:
       - uses: actions/checkout@v4
 
@@ -58,13 +47,13 @@ jobs:
 
       - name: Plan (LLM or heuristic)
         env:
-          USER_PROMPT: ${{ github.event.inputs.user_prompt }}
-          REPORT_TYPE: ${{ github.event.inputs.report_type }}
-          MAX_SUBS: ${{ github.event.inputs.max_subs }}
-          MONTHS: ${{ github.event.inputs.months }}
-          MIN_UPVOTES: ${{ github.event.inputs.min_upvotes }}
-          LIMIT: ${{ github.event.inputs.limit }}
-          KEYWORDS: ${{ github.event.inputs.keywords }}
+          USER_PROMPT: ${{ inputs.user_prompt }}
+          REPORT_TYPE: ${{ inputs.report_type || 'auto' }}
+          MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
+          MONTHS: ${{ env.DEFAULT_MONTHS }}
+          MIN_UPVOTES: ${{ env.DEFAULT_MIN_UPVOTES }}
+          LIMIT: ${{ env.DEFAULT_LIMIT }}
+          KEYWORDS: ${{ inputs.keywords }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
@@ -93,13 +82,14 @@ jobs:
           echo "MIN_UPVOTES=${MIN_UPVOTES_P}" >> $GITHUB_ENV
           echo "LIMIT=${LIMIT_P}" >> $GITHUB_ENV
           echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
-          # NOTE: keywords filtresini şimdilik export etmiyoruz
+          echo "MAX_SUBS=${MAX_SUBS}" >> $GITHUB_ENV
+
       - name: Test Reddit API health
         env:
-          USER_PROMPT: ${{ github.event.inputs.user_prompt }}
-          KEYWORDS: ${{ github.event.inputs.keywords }}
-          MONTHS: ${{ github.event.inputs.months }}
-          MAX_SUBS: ${{ github.event.inputs.max_subs }}
+          USER_PROMPT: ${{ inputs.user_prompt }}
+          KEYWORDS: ${{ inputs.keywords }}
+          MONTHS: ${{ env.DEFAULT_MONTHS }}
+          MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
         run: |
           python pipeline/test_reddit_api.py \
             --prompt "${USER_PROMPT}" \
@@ -112,10 +102,10 @@ jobs:
 
       - name: Discover subreddits from prompt/keywords
         env:
-          USER_PROMPT: ${{ github.event.inputs.user_prompt }}
-          KEYWORDS: ${{ github.event.inputs.keywords }}
-          MONTHS: ${{ github.event.inputs.months }}
-          MAX_SUBS: ${{ github.event.inputs.max_subs }}
+          USER_PROMPT: ${{ inputs.user_prompt }}
+          KEYWORDS: ${{ inputs.keywords }}
+          MONTHS: ${{ env.DEFAULT_MONTHS }}
+          MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
         run: |
           python pipeline/discover_subs.py \
             --prompt "${USER_PROMPT}" \
@@ -141,10 +131,9 @@ jobs:
               print("No discovered subs; keeping original plan.")
           PY
 
-
       - name: Validate subreddits
         run: |
-          python pipeline/validate_subs.py --in data/plan.json --out subs.txt --limit ${{ github.event.inputs.max_subs }}
+          python pipeline/validate_subs.py --in data/plan.json --out subs.txt --limit ${MAX_SUBS}
           echo "SUBS=$(cat subs.txt)" >> $GITHUB_ENV
           echo "Validated subs: $(cat subs.txt)"
 
@@ -156,9 +145,6 @@ jobs:
         run: |
           python pipeline/patch_plan_subs.py --plan data/plan.json --subs-file subs.txt
 
-
-
-
       - name: Scrape
         run: |
           echo "Using subs: ${SUBS}"
@@ -167,36 +153,26 @@ jobs:
           fi
           python pipeline/scrape_reddit.py \
             --subs ${SUBS} \
-            --prompt "${{ github.event.inputs.user_prompt }}" \
+            --prompt "${{ inputs.user_prompt }}" \
             --months ${MONTHS} \
             --min-upvotes ${MIN_UPVOTES} \
             --limit ${LIMIT} \
-            --keywords ${{ github.event.inputs.keywords }} \
+            --keywords ${{ inputs.keywords }} \
             --out data/raw.jsonl
-
-
-
 
       - name: Quick count
         run: |
           echo "JSONL lines:"; (wc -l data/raw.jsonl || true)
           echo "First 3 lines:"; (head -n 3 data/raw.jsonl || true)
 
-
-
       - name: Keyword filter (optional)
-        if: ${{ github.event.inputs.keywords != '' }}
+        if: ${{ inputs.keywords != '' }}
         run: |
           python pipeline/filter_keywords.py \
             --in data/raw.jsonl \
             --out data/raw.jsonl \
-            --keywords "${{ github.event.inputs.keywords }}" \
+            --keywords "${{ inputs.keywords }}" \
             --mode any
-
-
-
-
-
 
       - name: Analyze
         run: |
@@ -212,7 +188,6 @@ jobs:
         run: |
           python pipeline/llm_summary.py --plan data/plan.json --analysis data/analysis.parquet --out reports/summary.md || echo "skip"
 
-
       - name: Build report
         run: |
           python pipeline/build_report_dynamic.py \
@@ -221,7 +196,6 @@ jobs:
             --analysis data/analysis.parquet \
             --summary reports/summary.md \
             --out public/index.html
-
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
