@@ -5,142 +5,142 @@ from datetime import datetime, timedelta
 import requests
 from util import ensure_dirs, save_jsonl, clean_text, now_iso
 
-try:
-    import praw
-except Exception:
-    praw = None
-
 def month_ago_utc(months: int) -> int:
     now = datetime.utcnow()
-    start = now - timedelta(days=30 * months)
+    start = now - timedelta(days=30*months)
     return int(start.timestamp())
 
-def scrape_pushshift(subs: List[str], since_utc: int, limit: int, min_upvotes: int):
+def pushshift_by_subs(subs: List[str], since_utc: int, limit: int, min_upvotes: int):
     base = "https://api.pushshift.io/reddit/search/submission/"
     size = 250
     out = []
-
     for sub in subs:
         params = {
-            "subreddit": sub.replace("r/", ""),
+            "subreddit": sub.replace("r/",""),
             "after": since_utc,
             "size": size,
             "sort": "desc",
-            "sort_type": "created_utc",  # ✅ zaman bazlı sırala
+            "sort_type": "created_utc",   # zaman bazlı
         }
         fetched = 0
         while fetched < limit:
             try:
                 r = requests.get(base, params=params, timeout=30)
                 r.raise_for_status()
-                payload = r.json()
-                data = payload.get("data", [])
+                data = r.json().get("data", [])
                 if not data:
                     break
-
                 for d in data:
-                    # eşik
-                    if d.get("score", 0) < min_upvotes:
+                    if d.get("score",0) < min_upvotes: 
                         continue
                     out.append({
                         "id": d.get("id"),
                         "subreddit": sub,
                         "created_utc": d.get("created_utc"),
-                        "title": clean_text(d.get("title", "")),
-                        "selftext": clean_text(d.get("selftext", "")),
+                        "title": clean_text(d.get("title","")),
+                        "selftext": clean_text(d.get("selftext","")),
                         "url": d.get("full_link") or f"https://reddit.com/{d.get('id')}",
-                        "upvotes": d.get("score", 0),
-                        "num_comments": d.get("num_comments", 0),
+                        "upvotes": d.get("score",0),
+                        "num_comments": d.get("num_comments",0),
                         "source": "pushshift",
                         "fetched_at": now_iso(),
                     })
-
                 fetched += len(data)
                 if fetched >= limit:
                     break
-
-                # sıradaki sayfa için: en son kaydın created_utc'sini "before" olarak kullan
                 last_ts = data[-1].get("created_utc")
                 if not last_ts:
                     break
                 params["before"] = last_ts
-                # 'after' sabit kalsın; before ile geri doğru ilerliyoruz
-                time.sleep(0.6)
+                time.sleep(0.5)
             except Exception as e:
                 print("pushshift error:", e, file=sys.stderr)
-                time.sleep(2)
+                time.sleep(1.0)
                 break
     return out
 
-
-def scrape_reddit_api(subs: List[str], since_utc: int, limit: int, min_upvotes: int):
-    if not praw:
-        print("PRAW not installed, skipping Reddit API.", file=sys.stderr)
+def pushshift_by_keywords(keywords: List[str], since_utc: int, limit: int, min_upvotes: int):
+    if not keywords:
         return []
-    cid = os.getenv("REDDIT_CLIENT_ID")
-    secret = os.getenv("REDDIT_CLIENT_SECRET")
-    ua = os.getenv("REDDIT_USER_AGENT", "reddit_research_agent/0.1")
-    if not (cid and secret):
-        print("Missing Reddit API credentials; set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET.", file=sys.stderr)
-        return []
-
-    reddit = praw.Reddit(client_id=cid, client_secret=secret, user_agent=ua)
+    base = "https://api.pushshift.io/reddit/search/submission/"
+    size = 250
     out = []
-    for sub in subs:
-        count = 0
-        for post in reddit.subreddit(sub.replace("r/", "")).top(time_filter="year", limit=limit):
-            if post.score < min_upvotes:
-                continue
-            if post.created_utc < since_utc:
-                continue
-            out.append({
-                "id": post.id,
-                "subreddit": sub,
-                "created_utc": int(post.created_utc),
-                "title": clean_text(post.title or ""),
-                "selftext": clean_text(getattr(post, "selftext", "") or ""),
-                "url": f"https://www.reddit.com{post.permalink}",
-                "upvotes": int(post.score or 0),
-                "num_comments": int(post.num_comments or 0),
-                "source": "reddit_api",
-                "fetched_at": now_iso(),
-            })
-            count += 1
-            if count >= limit:
+    # basit: tüm Reddit'te keyword OR ile ara
+    q = " OR ".join(keywords)
+    params = {
+        "q": q,
+        "after": since_utc,
+        "size": size,
+        "sort": "desc",
+        "sort_type": "created_utc",
+    }
+    fetched = 0
+    while fetched < limit:
+        try:
+            r = requests.get(base, params=params, timeout=30)
+            r.raise_for_status()
+            data = r.json().get("data", [])
+            if not data:
                 break
-        time.sleep(0.4)
+            for d in data:
+                if d.get("score",0) < min_upvotes:
+                    continue
+                out.append({
+                    "id": d.get("id"),
+                    "subreddit": "r/"+str(d.get("subreddit","")),
+                    "created_utc": d.get("created_utc"),
+                    "title": clean_text(d.get("title","")),
+                    "selftext": clean_text(d.get("selftext","")),
+                    "url": d.get("full_link") or f"https://reddit.com/{d.get('id')}",
+                    "upvotes": d.get("score",0),
+                    "num_comments": d.get("num_comments",0),
+                    "source": "pushshift_kw",
+                    "fetched_at": now_iso(),
+                })
+            fetched += len(data)
+            if fetched >= limit:
+                break
+            last_ts = data[-1].get("created_utc")
+            if not last_ts:
+                break
+            params["before"] = last_ts
+            time.sleep(0.5)
+        except Exception as e:
+            print("pushshift kw error:", e, file=sys.stderr)
+            time.sleep(1.0)
+            break
     return out
 
 def main():
+    import json
     ap = argparse.ArgumentParser()
     ap.add_argument("--subs", nargs="+", required=True)
     ap.add_argument("--months", type=int, default=12)
     ap.add_argument("--limit", type=int, default=2000)
     ap.add_argument("--min-upvotes", type=int, default=20)
-    ap.add_argument("--use-pushshift", action="store_true")
+    ap.add_argument("--keywords", nargs="*", default=[])
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     ensure_dirs(args.out)
     since = month_ago_utc(args.months)
 
-    rows = []
-    if not args.use_pushshift:
-        rows += scrape_reddit_api(args.subs, since, args.limit, args.min_upvotes)
-    if args.use_pushshift or not rows:
-        rows += scrape_pushshift(args.subs, since, args.limit, args.min_upvotes)
+    # 1) Subreddit tabanlı dene
+    rows = pushshift_by_subs(args.subs, since, args.limit, args.min_upvotes)
 
-    # dedupe by id
-    seen = set()
-    deduped = []
+    # 2) Hiçbir şey gelmediyse: keyword tabanlı geniş arama
+    if not rows and args.keywords:
+        rows = pushshift_by_keywords(args.keywords, since, args.limit, args.min_upvotes)
+
+    # dedupe
+    seen, ded = set(), []
     for r in rows:
-        if r["id"] in seen:
+        if r["id"] in seen: 
             continue
-        seen.add(r["id"])
-        deduped.append(r)
+        seen.add(r["id"]); ded.append(r)
 
-    save_jsonl(deduped, args.out)
-    print(f"Saved {len(deduped)} items to {args.out}")
+    save_jsonl(ded, args.out)
+    print(f"Saved {len(ded)} items to {args.out}")
 
 if __name__ == "__main__":
     main()
