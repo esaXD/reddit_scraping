@@ -101,6 +101,11 @@ jobs:
           echo "SUBS=$(cat subs.txt)" >> $GITHUB_ENV
           echo "Validated subs: $(cat subs.txt)"
 
+      - name: Patch plan with validated subs
+        run: |
+          python pipeline/patch_plan_subs.py --plan data/plan.json --subs-file subs.txt
+
+
 
       - name: Scrape
         run: |
