@@ -11,6 +11,10 @@ on:
         description: "auto|market|competitor|trend|sentiment|ideation|faq"
         required: false
         default: "auto"
+      max_subs:
+        description: "Max subreddits to analyze"
+        required: false
+        default: "8"
       keywords:
         description: "Optional keyword filter"
         required: false
@@ -29,7 +33,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DEFAULT_MAX_SUBS: "8"
+      DEFAULT_MAX_SUBS: "${{ inputs.max_subs || '8' }}"
       DEFAULT_MONTHS: "12"
       DEFAULT_MIN_UPVOTES: "20"
       DEFAULT_LIMIT: "1000"

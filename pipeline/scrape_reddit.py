@@ -145,7 +145,7 @@ def main():
     ensure_dirs(a.out)
     base_months = max(1, int(a.months))
     base_min_upvotes = max(0, int(a.min_upvotes))
-    target_posts = max(50, min(a.limit, 200))
+    target_posts = max(40, min(a.limit, 150))
 
     # Subreddit sonuçları + keyword sonuçları = birleşim
     prompt_text = a.prompt or ""
@@ -185,25 +185,22 @@ def main():
     if keywords_clean:
         print("Seed keywords:", ", ".join(keywords_clean), flush=True)
 
-    attempts = []
-    attempts.append(
-        {"months": base_months, "min_upvotes": base_min_upvotes, "label": "base window"}
-    )
-    if base_min_upvotes > 5:
-        attempts.append(
-            {"months": base_months, "min_upvotes": max(base_min_upvotes // 2, 3), "label": "lower upvotes"}
-        )
-    if base_months < 24:
-        attempts.append(
-            {"months": max(24, base_months * 2), "min_upvotes": max(base_min_upvotes // 2, 0), "label": "older window"}
-        )
-    attempts.append(
-        {"months": max(36, base_months * 3), "min_upvotes": 0, "label": "broad fallback"}
-    )
+    attempts = [
+        {
+            "months": max(base_months, 24),
+            "min_upvotes": min(base_min_upvotes, 10),
+            "label": "base window",
+        },
+        {
+            "months": max(36, base_months * 2),
+            "min_upvotes": 0,
+            "label": "broad fallback",
+        },
+    ]
 
     ded = []
     seen = set()
-    for attempt in attempts:
+    for idx, attempt in enumerate(attempts):
         months_cur = attempt["months"]
         min_upvotes_cur = attempt["min_upvotes"]
         label = attempt["label"]
@@ -237,6 +234,9 @@ def main():
         if len(ded) >= target_posts:
             print(f"[attempt:{label}] reached target {target_posts}; stopping attempts.", flush=True)
             break
+        if idx == 0 and added < max(5, target_posts // 4):
+            print(f"[attempt:{label}] added {added} posts; escalating to broad fallback early.", flush=True)
+            continue
 
     original_count = len(ded)
 
