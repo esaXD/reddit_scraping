@@ -204,6 +204,7 @@ def main():
             seen.add(s.lower())
             uniq.append(s)
     plan["subreddits"] = uniq[: a.max_subs]
+    plan["original_prompt"] = a.prompt
 
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=2)
