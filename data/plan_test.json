@@ -8,31 +8,9 @@
   "report_type": "faq",
   "filters": {
     "keywords": [
-      "physiognomy",
-      "face reading",
-      "face analysis",
-      "mobile",
-      "mobile app",
-      "mobile application",
-      "app",
-      "application",
-      "features",
-      "feature set",
-      "user",
-      "users",
-      "experience",
-      "user experience",
-      "design",
-      "app design",
-      "ui design",
-      "ux design",
-      "performance",
-      "app performance",
-      "performance optimization",
-      "security",
-      "app security",
-      "mobile security"
+      "test"
     ]
   },
-  "rationale": "heuristic"
+  "rationale": "heuristic",
+  "original_prompt": "test"
 }

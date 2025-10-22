@@ -65,59 +65,62 @@ jobs:
             --out-keywords seed_keywords.txt
 
           python - <<'PY'
-import json
-import os
-import shlex
-from pathlib import Path
-seed = json.loads(Path("data/seed_plan.json").read_text(encoding="utf-8"))
-subs = " ".join(seed.get("subreddits", []))
-keywords = seed.get("keywords", [])
-must = seed.get("filters", {}).get("must_include", [])
-should = seed.get("filters", {}).get("should_include", [])
-combined = keywords[:]
-for item in must + should:
-    if item not in combined:
-        combined.append(item)
-user_kw = os.getenv("USER_KEYWORDS", "")
-if user_kw:
-    try:
-        extras = shlex.split(user_kw)
-    except Exception:
-        extras = user_kw.replace(",", " ").split()
-    for item in extras:
-        text = item.strip()
-        if text and text not in combined:
-            combined.append(text)
-months = seed.get("timeframe_months")
-min_upvotes = seed.get("min_upvotes")
-print(f"Seed subreddits: {subs or '(none)'}")
-print("Seed keywords:", ", ".join(combined) or "(none)")
-Path("data/seed_env.json").write_text(
-    json.dumps(
-        {
-            "subs": subs,
-            "keywords": combined,
-            "months": months,
-            "min_upvotes": min_upvotes,
-        },
-        ensure_ascii=False,
-    ),
-    encoding="utf-8",
-)
+            import json
+            import os
+            import shlex
+            from pathlib import Path
+
+            seed = json.loads(Path("data/seed_plan.json").read_text(encoding="utf-8"))
+            subs = " ".join(seed.get("subreddits", []))
+            keywords = seed.get("keywords", [])
+            must = seed.get("filters", {}).get("must_include", [])
+            should = seed.get("filters", {}).get("should_include", [])
+            combined = keywords[:]
+            for item in must + should:
+                if item not in combined:
+                    combined.append(item)
+            user_kw = os.getenv("USER_KEYWORDS", "")
+            if user_kw:
+                try:
+                    extras = shlex.split(user_kw)
+                except Exception:
+                    extras = user_kw.replace(",", " ").split()
+                for item in extras:
+                    text = item.strip()
+                    if text and text not in combined:
+                        combined.append(text)
+            months = seed.get("timeframe_months")
+            min_upvotes = seed.get("min_upvotes")
+            print(f"Seed subreddits: {subs or '(none)'}")
+            print("Seed keywords:", ", ".join(combined) or "(none)")
+            Path("data/seed_env.json").write_text(
+                json.dumps(
+                    {
+                        "subs": subs,
+                        "keywords": combined,
+                        "months": months,
+                        "min_upvotes": min_upvotes,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
 PY
           python - <<'PY'
-import json, os
-seed_env = json.loads(open("data/seed_env.json", encoding="utf-8").read())
-keywords_json = json.dumps(seed_env.get("keywords", []), ensure_ascii=False)
-with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-    f.write(f"SEED_SUBS={seed_env.get('subs', '')}\n")
-    f.write(f"SEED_KEYWORDS_JSON={keywords_json}\n")
-    months = seed_env.get("months")
-    if months:
-        f.write(f"SEED_MONTHS={months}\n")
-    min_up = seed_env.get("min_upvotes")
-    if min_up is not None:
-        f.write(f"SEED_MIN_UPVOTES={min_up}\n")
+            import json
+            import os
+
+            seed_env = json.loads(open("data/seed_env.json", encoding="utf-8").read())
+            keywords_json = json.dumps(seed_env.get("keywords", []), ensure_ascii=False)
+            with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+                f.write(f"SEED_SUBS={seed_env.get('subs', '')}\n")
+                f.write(f"SEED_KEYWORDS_JSON={keywords_json}\n")
+                months = seed_env.get("months")
+                if months:
+                    f.write(f"SEED_MONTHS={months}\n")
+                min_up = seed_env.get("min_upvotes")
+                if min_up is not None:
+                    f.write(f"SEED_MIN_UPVOTES={min_up}\n")
 PY
 
       - name: Plan (LLM or heuristic)
