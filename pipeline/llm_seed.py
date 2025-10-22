@@ -3,8 +3,9 @@ import argparse
 import json
 import os
 import shlex
+import sys
 
-MODEL = "gpt-4o-mini-search-preview"
+MODEL = "gpt-4o-mini"
 
 SYSTEM = (
     "You are an expert research planner who can browse the web and Reddit indices. "
@@ -114,27 +115,6 @@ def normalize_keywords(raw):
     return cleaned
 
 
-def fallback_seed(prompt: str, max_subs: int, default_months: int, default_min_upvotes: int):
-    # Basic fallback: use noun-like tokens as keywords, no subreddit suggestions.
-    raw_tokens = []
-    try:
-        raw_tokens = shlex.split(prompt)
-    except Exception:
-        raw_tokens = prompt.split()
-    raw_tokens = [tok.strip(" ,.!?\"'").lower() for tok in raw_tokens if tok.strip()]
-    keywords = sorted(set(tok for tok in raw_tokens if len(tok) > 3))[:max_subs]
-    return {
-        "subreddits": [],
-        "keywords": keywords,
-        "filters": {"must_include": keywords[:3], "should_include": [], "exclude": []},
-        "search_queries": [],
-        "timeframe_months": default_months,
-        "min_upvotes": default_min_upvotes,
-        "confidence": "low",
-        "notes": "Fallback seed (LLM unavailable). Please refine manually.",
-    }
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--prompt", required=True)
@@ -155,7 +135,8 @@ def main():
             data = None
 
     if not data:
-        data = fallback_seed(args.prompt, args.max_subs, args.default_months, args.default_min_upvotes)
+        print("LLM seed discovery failed (no response or invalid JSON). Aborting.", file=sys.stderr, flush=True)
+        sys.exit(1)
 
     subs = normalize_subreddits(data.get("subreddits"))
     keywords = normalize_keywords(data.get("keywords"))
