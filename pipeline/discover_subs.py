@@ -55,6 +55,18 @@ SYNONYM_MAP = {
     _normalize_lookup("gelistirme"): ["development", "application development"],
     _normalize_lookup("yapay zeka"): ["artificial intelligence", "ai"],
     _normalize_lookup("sesli komut"): ["voice control", "voice commands", "speech recognition"],
+    _normalize_lookup("haptik"): ["haptic", "haptic technology", "haptic glove"],
+    _normalize_lookup("haptic"): ["haptic", "haptic technology", "haptic glove"],
+    _normalize_lookup("haptik eldiven"): ["haptic glove", "vr glove", "haptic wearable"],
+    _normalize_lookup("haptic glove"): ["haptic glove", "vr glove", "haptic wearable"],
+    _normalize_lookup("eldiven"): ["glove", "wearable glove", "smart glove"],
+    _normalize_lookup("eldivenin"): ["glove", "wearable glove", "smart glove"],
+    _normalize_lookup("pazar"): ["market", "market landscape"],
+    _normalize_lookup("pazarı"): ["market", "market landscape"],
+    _normalize_lookup("market"): ["market", "market positioning"],
+    _normalize_lookup("markette"): ["market", "market positioning"],
+    _normalize_lookup("marketteki"): ["market", "market positioning"],
+    _normalize_lookup("yeri"): ["positioning", "market position"],
 }
 
 

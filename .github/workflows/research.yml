@@ -45,32 +45,94 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r pipeline/requirements.txt
 
-      - name: Discover seed subreddits
+      - name: LLM seed discovery (subreddits & keywords)
         env:
           USER_PROMPT: ${{ inputs.user_prompt }}
-          KEYWORDS: ${{ inputs.keywords }}
-          MONTHS: ${{ env.DEFAULT_MONTHS }}
+          USER_KEYWORDS: ${{ inputs.keywords }}
+          DEFAULT_MONTHS: ${{ env.DEFAULT_MONTHS }}
+          DEFAULT_MIN_UPVOTES: ${{ env.DEFAULT_MIN_UPVOTES }}
           MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          python pipeline/discover_subs.py \
+          mkdir -p data
+          python pipeline/llm_seed.py \
             --prompt "${USER_PROMPT}" \
-            --keywords "${KEYWORDS}" \
-            --months ${MONTHS} \
             --max-subs ${MAX_SUBS} \
-            --out seed_subs.txt
-          SEEDS=$(tr '\n' ' ' < seed_subs.txt)
-          echo "SEED_SUBS=${SEEDS}" >> $GITHUB_ENV
-          echo "Seed subreddits: ${SEEDS}"
+            --default-months ${DEFAULT_MONTHS} \
+            --default-min-upvotes ${DEFAULT_MIN_UPVOTES} \
+            --out-json data/seed_plan.json \
+            --out-subs seed_subs.txt \
+            --out-keywords seed_keywords.txt
+
+          python - <<'PY'
+import json
+import os
+import shlex
+from pathlib import Path
+seed = json.loads(Path("data/seed_plan.json").read_text(encoding="utf-8"))
+subs = " ".join(seed.get("subreddits", []))
+keywords = seed.get("keywords", [])
+must = seed.get("filters", {}).get("must_include", [])
+should = seed.get("filters", {}).get("should_include", [])
+combined = keywords[:]
+for item in must + should:
+    if item not in combined:
+        combined.append(item)
+user_kw = os.getenv("USER_KEYWORDS", "")
+if user_kw:
+    try:
+        extras = shlex.split(user_kw)
+    except Exception:
+        extras = user_kw.replace(",", " ").split()
+    for item in extras:
+        text = item.strip()
+        if text and text not in combined:
+            combined.append(text)
+months = seed.get("timeframe_months")
+min_upvotes = seed.get("min_upvotes")
+print(f"Seed subreddits: {subs or '(none)'}")
+print("Seed keywords:", ", ".join(combined) or "(none)")
+Path("data/seed_env.json").write_text(
+    json.dumps(
+        {
+            "subs": subs,
+            "keywords": combined,
+            "months": months,
+            "min_upvotes": min_upvotes,
+        },
+        ensure_ascii=False,
+    ),
+    encoding="utf-8",
+)
+PY
+          python - <<'PY'
+import json, os
+seed_env = json.loads(open("data/seed_env.json", encoding="utf-8").read())
+keywords_json = json.dumps(seed_env.get("keywords", []), ensure_ascii=False)
+with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+    f.write(f"SEED_SUBS={seed_env.get('subs', '')}\n")
+    f.write(f"SEED_KEYWORDS_JSON={keywords_json}\n")
+    months = seed_env.get("months")
+    if months:
+        f.write(f"SEED_MONTHS={months}\n")
+    min_up = seed_env.get("min_upvotes")
+    if min_up is not None:
+        f.write(f"SEED_MIN_UPVOTES={min_up}\n")
+PY
 
       - name: Plan (LLM or heuristic)
         env:
           USER_PROMPT: ${{ inputs.user_prompt }}
           REPORT_TYPE: ${{ inputs.report_type || 'auto' }}
           MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
-          MONTHS: ${{ env.DEFAULT_MONTHS }}
-          MIN_UPVOTES: ${{ env.DEFAULT_MIN_UPVOTES }}
+          DEFAULT_MONTHS: ${{ env.DEFAULT_MONTHS }}
+          DEFAULT_MIN_UPVOTES: ${{ env.DEFAULT_MIN_UPVOTES }}
           LIMIT: ${{ env.DEFAULT_LIMIT }}
-          KEYWORDS: ${{ inputs.keywords }}
+          USER_KEYWORDS: ${{ inputs.keywords }}
+          SEED_SUBS: ${{ env.SEED_SUBS }}
+          SEED_KEYWORDS_JSON: ${{ env.SEED_KEYWORDS_JSON }}
+          SEED_MONTHS: ${{ env.SEED_MONTHS }}
+          SEED_MIN_UPVOTES: ${{ env.SEED_MIN_UPVOTES }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
@@ -78,15 +140,18 @@ jobs:
           REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
         run: |
           mkdir -p data reports public
+          PLAN_MONTHS=${SEED_MONTHS:-${DEFAULT_MONTHS}}
+          PLAN_MIN_UPVOTES=${SEED_MIN_UPVOTES:-${DEFAULT_MIN_UPVOTES}}
           python pipeline/llm_planner.py \
             --prompt "${USER_PROMPT}" \
             --report-type "${REPORT_TYPE}" \
             --max-subs ${MAX_SUBS} \
-            --default-months ${MONTHS} \
-            --default-min-upvotes ${MIN_UPVOTES} \
+            --default-months ${PLAN_MONTHS} \
+            --default-min-upvotes ${PLAN_MIN_UPVOTES} \
             --default-limit ${LIMIT} \
-            --keywords "${KEYWORDS}" \
+            --keywords "${USER_KEYWORDS}" \
             --seed-subs "${SEED_SUBS}" \
+            --seed-keywords-json '${SEED_KEYWORDS_JSON}' \
             --out data/plan.json
 
           SUBS=$(python -c "import json;print(' '.join(json.load(open('data/plan.json'))['subreddits']))")
@@ -94,6 +159,8 @@ jobs:
           MIN_UPVOTES_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['min_upvotes'])")
           LIMIT_P=$(python -c "import json;print(json.load(open('data/plan.json'))['params']['limit'])")
           REPORT_TYPE_P=$(python -c "import json;print(json.load(open('data/plan.json'))['report_type'])")
+          PLAN_KEYWORDS_JSON=$(python -c "import json;print(json.dumps(json.load(open('data/plan.json')).get('filters', {}).get('keywords', []), ensure_ascii=False))")
+          PLAN_KEYWORDS=$(python -c "import json;print(' '.join(json.load(open('data/plan.json')).get('filters', {}).get('keywords', [])))")
 
           echo "SUBS=${SUBS}" >> $GITHUB_ENV
           echo "MONTHS=${MONTHS_P}" >> $GITHUB_ENV
@@ -101,63 +168,30 @@ jobs:
           echo "LIMIT=${LIMIT_P}" >> $GITHUB_ENV
           echo "REPORT_TYPE=${REPORT_TYPE_P}" >> $GITHUB_ENV
           echo "MAX_SUBS=${MAX_SUBS}" >> $GITHUB_ENV
+          echo "SCRAPE_KEYWORDS_JSON=${PLAN_KEYWORDS_JSON}" >> $GITHUB_ENV
+          echo "SCRAPE_KEYWORDS=${PLAN_KEYWORDS}" >> $GITHUB_ENV
 
       - name: Test Reddit API health
         env:
           USER_PROMPT: ${{ inputs.user_prompt }}
-          KEYWORDS: ${{ inputs.keywords }}
-          MONTHS: ${{ env.DEFAULT_MONTHS }}
+          KEYWORDS_JSON: ${{ env.SCRAPE_KEYWORDS_JSON }}
+          MONTHS: ${{ env.MONTHS }}
           MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
         run: |
           python pipeline/test_reddit_api.py \
             --prompt "${USER_PROMPT}" \
-            --keywords "${KEYWORDS}" \
+            --keywords-json '${KEYWORDS_JSON}' \
             --subs "${SUBS}" \
             --months ${MONTHS} \
             --max-subs ${MAX_SUBS}
           echo "Diagnostics:"
           cat data/api_diagnostics.json
 
-      - name: Discover subreddits from prompt/keywords
-        env:
-          USER_PROMPT: ${{ inputs.user_prompt }}
-          KEYWORDS: ${{ inputs.keywords }}
-          MONTHS: ${{ env.DEFAULT_MONTHS }}
-          MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
-        run: |
-          python pipeline/discover_subs.py \
-            --prompt "${USER_PROMPT}" \
-            --keywords "${KEYWORDS}" \
-            --months ${MONTHS} \
-            --max-subs ${MAX_SUBS} \
-            --out subs.txt
-          echo "SUBS=$(cat subs.txt)" >> $GITHUB_ENV
-          echo "Discovered subs: $(cat subs.txt)"
-
-      - name: Patch plan with discovered subs
-        run: |
-          python - <<'PY'
-          import json
-          plan = json.load(open("data/plan.json","r",encoding="utf-8"))
-          subs = open("subs.txt","r",encoding="utf-8").read().strip().split()
-          if subs:
-              plan["subreddits"] = subs
-              with open("data/plan.json","w",encoding="utf-8") as f:
-                  json.dump(plan,f,ensure_ascii=False,indent=2)
-              print("Patched plan with discovered subs:", " ".join(subs))
-          else:
-              print("No discovered subs; keeping original plan.")
-          PY
-
       - name: Validate subreddits
         run: |
           python pipeline/validate_subs.py --in data/plan.json --out subs.txt --limit ${MAX_SUBS}
           echo "SUBS=$(cat subs.txt)" >> $GITHUB_ENV
           echo "Validated subs: $(cat subs.txt)"
-
-      - name: Patch plan with validated subs
-        run: |
-          python pipeline/patch_plan_subs.py --plan data/plan.json --subs-file subs.txt
 
       - name: Patch plan with validated subs
         run: |
@@ -175,7 +209,7 @@ jobs:
             --months ${MONTHS} \
             --min-upvotes ${MIN_UPVOTES} \
             --limit ${LIMIT} \
-            --keywords ${{ inputs.keywords }} \
+            --keywords-json '${SCRAPE_KEYWORDS_JSON}' \
             --out data/raw.jsonl
 
       - name: Quick count
@@ -184,12 +218,12 @@ jobs:
           echo "First 3 lines:"; (head -n 3 data/raw.jsonl || true)
 
       - name: Keyword filter (optional)
-        if: ${{ inputs.keywords != '' }}
+        if: ${{ env.SCRAPE_KEYWORDS_JSON != '' && env.SCRAPE_KEYWORDS_JSON != '[]' }}
         run: |
           python pipeline/filter_keywords.py \
             --in data/raw.jsonl \
             --out data/raw.jsonl \
-            --keywords "${{ inputs.keywords }}" \
+            --keywords-json '${SCRAPE_KEYWORDS_JSON}' \
             --mode any
 
       - name: Analyze
@@ -214,6 +248,14 @@ jobs:
             --analysis data/analysis.parquet \
             --summary reports/summary.md \
             --out public/index.html
+
+      - name: Display results snapshot
+        run: |
+          echo "---- Executive Summary (reports/summary.md) ----"
+          (sed -n '1,120p' reports/summary.md || echo "No summary available.")
+          echo ""
+          echo "---- Raw data sample (data/raw.jsonl) ----"
+          (head -n 5 data/raw.jsonl || echo "No raw data available.")
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

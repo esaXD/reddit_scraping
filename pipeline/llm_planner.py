@@ -3,6 +3,7 @@ import os
 import json
 import re
 import argparse
+import shlex
 from discover_subs import english_keywords
 
 SYSTEM = "You plan Reddit research. Return strict JSON only."
@@ -11,6 +12,7 @@ Report type hint: {report_type}
 Max subreddits: {max_subs}
 Defaults: months={def_months}, min_upvotes={def_min}, limit={def_limit}
 Candidate subreddits from search: {seed_subs}
+Candidate keywords from search: {seed_keywords}
 Schema:
 {{
   "subreddits": ["r/...", "..."],
@@ -66,6 +68,22 @@ def parse_seed_subs(seed_str: str) -> list:
     return normalize_sub_list(parts)
 
 
+def parse_seed_keywords(seed_json: str):
+    if not seed_json:
+        return []
+    try:
+        data = json.loads(seed_json)
+        if isinstance(data, list):
+            return [str(x).strip() for x in data if str(x).strip()]
+    except Exception:
+        pass
+    try:
+        parts = shlex.split(seed_json)
+    except Exception:
+        parts = seed_json.replace(",", " ").split()
+    return [p.strip() for p in parts if p.strip()]
+
+
 def normalize_sub_list(subs_iterable) -> list:
     out, seen = [], set()
     for raw in subs_iterable or []:
@@ -81,7 +99,7 @@ def normalize_sub_list(subs_iterable) -> list:
     return out
 
 
-def heuristic(prompt, report_type, max_subs, m, u, lim, keywords, seed_subs):
+def heuristic(prompt, report_type, max_subs, m, u, lim, keywords, seed_subs, seed_keywords):
     words = norm(prompt).split()
     subs = normalize_sub_list(seed_subs)
     seen = {s.lower() for s in subs}
@@ -117,7 +135,9 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords, seed_subs):
 
     subs = subs[:max_subs]
 
-    filters = english_keywords(prompt, keywords)
+    seed_kw_text = " ".join(seed_keywords)
+    keyword_payload = " ".join(filter(None, [seed_kw_text, keywords]))
+    filters = english_keywords(prompt, keyword_payload)
     if not filters:
         filters = english_keywords(prompt, "")
     filters = filters[:24] if filters else []
@@ -175,10 +195,12 @@ def main():
     ap.add_argument("--default-limit", type=int, default=1000)
     ap.add_argument("--keywords", default="")
     ap.add_argument("--seed-subs", default="")
+    ap.add_argument("--seed-keywords-json", default="")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
     seed_list = parse_seed_subs(a.seed_subs)
+    seed_keywords = parse_seed_keywords(a.seed_keywords_json)
 
     user = USER_TMPL.format(
         prompt=a.prompt,
@@ -188,6 +210,7 @@ def main():
         def_min=a.default_min_upvotes,
         def_limit=a.default_limit,
         seed_subs=", ".join(seed_list) if seed_list else "(none)",
+        seed_keywords=", ".join(seed_keywords) if seed_keywords else "(none)",
     )
 
     txt = call_anthropic(SYSTEM, user) or call_openai(SYSTEM, user)
@@ -208,6 +231,7 @@ def main():
             a.default_limit,
             a.keywords,
             seed_list,
+            seed_keywords,
         )
         plan["rationale"] = "heuristic"
     else:
@@ -216,7 +240,12 @@ def main():
             plan["subreddits"] = seed_list[: a.max_subs]
 
     existing_kw = plan.get("filters", {}).get("keywords")
-    canonical_kw = _prepare_keywords(a.prompt, existing_kw) or _prepare_keywords(a.prompt, a.keywords)
+    seed_kw_json = json.dumps(seed_keywords, ensure_ascii=False)
+    canonical_kw = (
+        _prepare_keywords(a.prompt, existing_kw)
+        or _prepare_keywords(a.prompt, seed_kw_json)
+        or _prepare_keywords(a.prompt, a.keywords)
+    )
     if canonical_kw:
         plan.setdefault("filters", {})["keywords"] = canonical_kw
     else:
@@ -232,6 +261,11 @@ def main():
             uniq.append(s)
     plan["subreddits"] = uniq[: a.max_subs]
     plan["original_prompt"] = a.prompt
+    if seed_list or seed_keywords:
+        plan["seed_context"] = {
+            "subreddits": seed_list,
+            "keywords": seed_keywords,
+        }
 
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=2)

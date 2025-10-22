@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shlex
 import time
 from typing import List, Dict
 
@@ -57,6 +58,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--keywords", default="")
+    parser.add_argument("--keywords-json", default="")
     parser.add_argument("--subs", default="")
     parser.add_argument("--months", type=int, default=12)
     parser.add_argument("--max-subs", type=int, default=8)
@@ -65,7 +67,30 @@ def main():
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
 
-    queries = build_search_queries(args.prompt, args.keywords, max_terms=args.max_subs * 2)
+    keyword_tokens = []
+    if args.keywords:
+        try:
+            keyword_tokens.extend(shlex.split(args.keywords))
+        except Exception:
+            keyword_tokens.extend(args.keywords.replace(",", " ").split())
+    if args.keywords_json:
+        try:
+            data = json.loads(args.keywords_json)
+            if isinstance(data, list):
+                keyword_tokens.extend(str(x).strip() for x in data if str(x).strip())
+        except Exception:
+            pass
+    seen = set()
+    keywords_clean = []
+    for tok in keyword_tokens:
+        key = tok.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        keywords_clean.append(tok)
+    keyword_blob = " ".join(keywords_clean)
+
+    queries = build_search_queries(args.prompt, keyword_blob, max_terms=args.max_subs * 2)
     checks = []
     if not queries:
         checks.append({

@@ -1,5 +1,6 @@
 # pipeline/scrape_reddit.py
 import argparse
+import json
 import os
 import time
 import sys
@@ -129,7 +130,6 @@ def pushshift_by_keywords(keywords: List[str], since_utc: int, limit: int, min_u
     return out
 
 def main():
-    import json
     ap = argparse.ArgumentParser()
     ap.add_argument("--subs", nargs="+", required=True)
     ap.add_argument("--prompt", default="")
@@ -137,6 +137,7 @@ def main():
     ap.add_argument("--limit", type=int, default=2000)
     ap.add_argument("--min-upvotes", type=int, default=20)
     ap.add_argument("--keywords", nargs="*", default=[])
+    ap.add_argument("--keywords-json", default="")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
@@ -147,9 +148,33 @@ def main():
 
     # Subreddit sonuçları + keyword sonuçları = birleşim
     prompt_text = a.prompt or ""
-    keyword_input = " ".join(a.keywords or [])
+    raw_keywords = list(a.keywords or [])
+    if a.keywords_json:
+        try:
+            extra = json.loads(a.keywords_json)
+            if isinstance(extra, list):
+                raw_keywords.extend(str(x) for x in extra if str(x).strip())
+        except Exception:
+            pass
+    keywords_clean = []
+    seen_kw = set()
+    for kw in raw_keywords:
+        if kw is None:
+            continue
+        text = str(kw).strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen_kw:
+            continue
+        seen_kw.add(key)
+        keywords_clean.append(text)
+
+    keyword_input = " ".join(keywords_clean)
     keyword_variants = english_keywords(prompt_text, keyword_input)
     search_strategies = build_search_queries(prompt_text, keyword_input) if (prompt_text or keyword_input) else []
+    if keywords_clean:
+        print("Seed keywords:", ", ".join(keywords_clean), flush=True)
 
     attempts = []
     attempts.append(

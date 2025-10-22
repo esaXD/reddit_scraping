@@ -16,10 +16,29 @@ def main():
     ap.add_argument("--in", dest="in_path", required=True)
     ap.add_argument("--out", dest="out_path", required=True)
     ap.add_argument("--keywords", default="")
+    ap.add_argument("--keywords-json", default="")
     ap.add_argument("--mode", choices=["any","all"], default="any")
     args = ap.parse_args()
 
     kws_raw = parse_keywords(args.keywords)
+    if args.keywords_json:
+        try:
+            data = json.loads(args.keywords_json)
+            if isinstance(data, list):
+                kws_raw.extend(str(x).strip() for x in data if str(x).strip())
+        except Exception:
+            pass
+    # dedupe preserving order
+    seen = set()
+    deduped = []
+    for item in kws_raw:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    kws_raw = deduped
+
     english = english_keywords("", " ".join(kws_raw))[:24]
     kws = [k.casefold() for k in english]
     if not kws:
