@@ -39,7 +39,7 @@ def call_openai(md: str):
             return None
         client = OpenAI()
         rsp = client.chat.completions.create(
-            model="gpt-5",
+            model="gpt-4o",
             messages=[{"role": "system", "content": SYS}, {"role": "user", "content": md}],
             temperature=0.2,
             max_tokens=500,
