@@ -17,6 +17,7 @@ def main():
     ap.add_argument("--out", dest="out_path", required=True)
     ap.add_argument("--keywords", default="")
     ap.add_argument("--keywords-json", default="")
+    ap.add_argument("--exclude-keywords-json", default="")
     ap.add_argument("--mode", choices=["any","all"], default="any")
     args = ap.parse_args()
 
@@ -41,6 +42,14 @@ def main():
 
     english = english_keywords("", " ".join(kws_raw))[:24]
     kws = [k.casefold() for k in english]
+    excludes = set()
+    if args.exclude_keywords_json:
+        try:
+            data = json.loads(args.exclude_keywords_json)
+            if isinstance(data, list):
+                excludes = {str(x).strip().casefold() for x in data if str(x).strip()}
+        except Exception:
+            pass
     if not kws:
         # no-op copy
         with open(args.in_path, "r", encoding="utf-8") as f, open(args.out_path, "w", encoding="utf-8") as g:
@@ -53,6 +62,8 @@ def main():
         for line in f:
             d = json.loads(line)
             txt = (d.get("title","") + " " + d.get("selftext","")).casefold()
+            if excludes and any(term in txt for term in excludes):
+                continue
             ok = all(k in txt for k in kws) if args.mode=="all" else any(k in txt for k in kws)
             if ok:
                 g.write(json.dumps(d, ensure_ascii=False) + "\n")

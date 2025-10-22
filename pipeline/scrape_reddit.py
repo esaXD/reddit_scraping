@@ -138,6 +138,7 @@ def main():
     ap.add_argument("--min-upvotes", type=int, default=20)
     ap.add_argument("--keywords", nargs="*", default=[])
     ap.add_argument("--keywords-json", default="")
+    ap.add_argument("--exclude-keywords-json", default="")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
@@ -171,6 +172,14 @@ def main():
         keywords_clean.append(text)
 
     keyword_input = " ".join(keywords_clean)
+    exclude_terms = []
+    if a.exclude_keywords_json:
+        try:
+            extra_ex = json.loads(a.exclude_keywords_json)
+            if isinstance(extra_ex, list):
+                exclude_terms = [str(x).strip().casefold() for x in extra_ex if str(x).strip()]
+        except Exception:
+            pass
     keyword_variants = english_keywords(prompt_text, keyword_input)
     search_strategies = build_search_queries(prompt_text, keyword_input) if (prompt_text or keyword_input) else []
     if keywords_clean:
@@ -230,6 +239,19 @@ def main():
             break
 
     original_count = len(ded)
+
+    if exclude_terms:
+        before = len(ded)
+        filtered_ex = []
+        for row in ded:
+            text = f"{row.get('title','')} {row.get('selftext','')}".casefold()
+            if any(term in text for term in exclude_terms if term):
+                continue
+            filtered_ex.append(row)
+        removed = before - len(filtered_ex)
+        ded = filtered_ex
+        if removed:
+            print(f"[filter] removed {removed} posts based on exclude keywords.", flush=True)
 
     if keyword_variants:
         match_terms = []

@@ -78,6 +78,11 @@ jobs:
           DEFAULT_MIN_UPVOTES: ${{ env.DEFAULT_MIN_UPVOTES }}
           LIMIT: ${{ env.DEFAULT_LIMIT }}
           USER_KEYWORDS: ${{ inputs.keywords }}
+          SEED_SUBS: ${{ env.SEED_SUBS }}
+          SEED_KEYWORDS_JSON: ${{ env.SEED_KEYWORDS_JSON }}
+          SEED_EXCLUDE_KEYWORDS_JSON: ${{ env.SEED_EXCLUDE_KEYWORDS_JSON }}
+          SEED_MONTHS: ${{ env.SEED_MONTHS }}
+          SEED_MIN_UPVOTES: ${{ env.SEED_MIN_UPVOTES }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
@@ -97,6 +102,8 @@ jobs:
             --keywords "${USER_KEYWORDS}" \
             --seed-subs "${SEED_SUBS}" \
             --seed-keywords-json "${SEED_KEYWORDS_JSON}" \
+            --seed-exclude-json "${SEED_EXCLUDE_KEYWORDS_JSON}" \
+            --seed-plan-json data/seed_plan.json \
             --out data/plan.json
 
           SUBS=$(python -c "import json;print(' '.join(json.load(open('data/plan.json'))['subreddits']))")
@@ -154,6 +161,7 @@ jobs:
             --min-upvotes ${MIN_UPVOTES} \
             --limit ${LIMIT} \
             --keywords-json "${SCRAPE_KEYWORDS_JSON}" \
+            --exclude-keywords-json "${SEED_EXCLUDE_KEYWORDS_JSON}" \
             --out data/raw.jsonl
 
       - name: Quick count
@@ -166,8 +174,10 @@ jobs:
         run: |
           python pipeline/filter_keywords.py \
             --in data/raw.jsonl \
+            --exclude-keywords-json "${SEED_EXCLUDE_KEYWORDS_JSON}" \
             --out data/raw.jsonl \
             --keywords-json "${SCRAPE_KEYWORDS_JSON}" \
+            --exclude-keywords-json "${SEED_EXCLUDE_KEYWORDS_JSON}" \
             --mode any
 
       - name: Analyze
