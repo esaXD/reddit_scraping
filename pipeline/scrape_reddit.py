@@ -33,7 +33,7 @@ def _req_with_retry(params, max_retry: int = 3):
         except Exception as e:
             last_err = e
             time.sleep(0.6 * (i + 1))
-    print("pullpush error:", last_err, file=sys.stderr)
+    print("pullpush error:", last_err, file=sys.stderr, flush=True)
     return []
 
 def pushshift_by_subs(subs: List[str], since_utc: int, limit: int, min_upvotes: int):
@@ -52,6 +52,7 @@ def pushshift_by_subs(subs: List[str], since_utc: int, limit: int, min_upvotes: 
             data = _req_with_retry(params)
             if not data:
                 break
+            print(f"[subs:{sub}] batch={len(data)} fetched={fetched + len(data)}", flush=True)
             for d in data:
                 if d.get("score", 0) < min_upvotes:
                     continue
@@ -77,6 +78,7 @@ def pushshift_by_subs(subs: List[str], since_utc: int, limit: int, min_upvotes: 
                 break
             params["before"] = int(last_ts)  # .0 floatlardan kaçın
             time.sleep(0.3)
+        print(f"[subs:{sub}] total_kept={len(out)}", flush=True)
     return out
 
 def pushshift_by_keywords(keywords: List[str], since_utc: int, limit: int, min_upvotes: int):
@@ -97,6 +99,7 @@ def pushshift_by_keywords(keywords: List[str], since_utc: int, limit: int, min_u
         data = _req_with_retry(params)
         if not data:
             break
+        print(f"[kw] query='{q[:80]}' batch={len(data)} fetched={fetched + len(data)}", flush=True)
         for d in data:
             if d.get("score", 0) < min_upvotes:
                 continue
@@ -122,6 +125,7 @@ def pushshift_by_keywords(keywords: List[str], since_utc: int, limit: int, min_u
             break
         params["before"] = int(last_ts)
         time.sleep(0.3)
+    print(f"[kw] query='{q[:80]}' total_kept={len(out)}", flush=True)
     return out
 
 def main():
@@ -171,16 +175,20 @@ def main():
         label = attempt["label"]
         since = month_ago_utc(months_cur)
 
+        print(f"--- Attempt '{label}' months={months_cur} min_upvotes={min_upvotes_cur} ---", flush=True)
         subs_rows = pushshift_by_subs(a.subs, since, a.limit, min_upvotes_cur)
+        print(f"[attempt:{label}] subs_rows={len(subs_rows)}", flush=True)
 
         kw_rows = []
         if search_strategies:
             for idx, terms in enumerate(search_strategies, 1):
                 results = pushshift_by_keywords(terms, since, a.limit, min_upvotes_cur)
                 kw_rows.extend(results)
-                print(f"Keyword strategy {idx} ({label}) -> {len(results)} posts (cumulative {len(kw_rows)})")
+                print(f"[attempt:{label}] keyword_strategy_{idx} added={len(results)} cumulative={len(kw_rows)}", flush=True)
                 if len(kw_rows) >= max(40, a.limit // 5):
                     break
+        else:
+            print(f"[attempt:{label}] no keyword strategies available", flush=True)
 
         rows = subs_rows + kw_rows
         added = 0
@@ -190,10 +198,10 @@ def main():
             seen.add(r["id"])
             ded.append(r)
             added += 1
-        print(f"Attempt {label}: months={months_cur}, min_upvotes={min_upvotes_cur} -> added {added} (total {len(ded)})")
+        print(f"[attempt:{label}] added={added} total={len(ded)}", flush=True)
 
         if len(ded) >= target_posts:
-            print(f"Reached target of {target_posts} posts; stopping further attempts.")
+            print(f"[attempt:{label}] reached target {target_posts}; stopping attempts.", flush=True)
             break
 
     original_count = len(ded)
@@ -216,16 +224,16 @@ def main():
 
         filtered = [r for r in ded if _matches(r, match_terms)]
         if len(filtered) < 15 and broad_terms:
-            print(f"Strict keyword filter kept {len(filtered)} posts; retrying with broader tokens.")
+            print(f"[filter] strict kept {len(filtered)} posts; retrying with broader tokens.", flush=True)
             filtered = [r for r in ded if _matches(r, broad_terms)]
 
         if not filtered and ded:
-            print("Keyword filtering removed all posts; returning unfiltered data.")
+            print("[filter] all posts removed by keyword filter; returning unfiltered data.", flush=True)
         else:
             ded = filtered
 
     save_jsonl(ded, a.out)
-    print(f"Saved {len(ded)} items to {a.out} (from {original_count} collected)")
+    print(f"Saved {len(ded)} items to {a.out} (from {original_count} collected)", flush=True)
 
 if __name__ == "__main__":
     main()
