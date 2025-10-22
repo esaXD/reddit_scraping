@@ -45,6 +45,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r pipeline/requirements.txt
 
+      - name: Discover seed subreddits
+        env:
+          USER_PROMPT: ${{ inputs.user_prompt }}
+          KEYWORDS: ${{ inputs.keywords }}
+          MONTHS: ${{ env.DEFAULT_MONTHS }}
+          MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
+        run: |
+          python pipeline/discover_subs.py \
+            --prompt "${USER_PROMPT}" \
+            --keywords "${KEYWORDS}" \
+            --months ${MONTHS} \
+            --max-subs ${MAX_SUBS} \
+            --out seed_subs.txt
+          SEEDS=$(tr '\n' ' ' < seed_subs.txt)
+          echo "SEED_SUBS=${SEEDS}" >> $GITHUB_ENV
+          echo "Seed subreddits: ${SEEDS}"
+
       - name: Plan (LLM or heuristic)
         env:
           USER_PROMPT: ${{ inputs.user_prompt }}
@@ -69,6 +86,7 @@ jobs:
             --default-min-upvotes ${MIN_UPVOTES} \
             --default-limit ${LIMIT} \
             --keywords "${KEYWORDS}" \
+            --seed-subs "${SEED_SUBS}" \
             --out data/plan.json
 
           SUBS=$(python -c "import json;print(' '.join(json.load(open('data/plan.json'))['subreddits']))")

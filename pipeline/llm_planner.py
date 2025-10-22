@@ -10,6 +10,7 @@ USER_TMPL = """Prompt: {prompt}
 Report type hint: {report_type}
 Max subreddits: {max_subs}
 Defaults: months={def_months}, min_upvotes={def_min}, limit={def_limit}
+Candidate subreddits from search: {seed_subs}
 Schema:
 {{
   "subreddits": ["r/...", "..."],
@@ -58,14 +59,42 @@ def _prepare_keywords(prompt_text: str, raw_keywords) -> list:
     return kws[:24] if kws else []
 
 
-def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
+def parse_seed_subs(seed_str: str) -> list:
+    if not seed_str:
+        return []
+    parts = seed_str.replace(",", " ").split()
+    return normalize_sub_list(parts)
+
+
+def normalize_sub_list(subs_iterable) -> list:
+    out, seen = [], set()
+    for raw in subs_iterable or []:
+        s = str(raw).strip()
+        if not s:
+            continue
+        tag = "r/" + s.split("/")[-1]
+        key = tag.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(tag)
+    return out
+
+
+def heuristic(prompt, report_type, max_subs, m, u, lim, keywords, seed_subs):
     words = norm(prompt).split()
-    subs = []
+    subs = normalize_sub_list(seed_subs)
+    seen = {s.lower() for s in subs}
 
     # Basit curated eşleşmeler (nötr; meditasyona zorlamıyoruz)
     for w in words:
         if w in CURATED:
-            subs += CURATED[w]
+            for s in CURATED[w]:
+                tag = "r/" + s.split("/")[-1]
+                if tag.lower() in seen:
+                    continue
+                subs.append(tag)
+                seen.add(tag.lower())
 
     # Hiçbir şey bulunamazsa boş bırak; discovery dolduracak
     if not subs:
@@ -86,16 +115,7 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords):
         else:
             report_type = "faq"
 
-    # uniq + kes
-    uniq = []
-    seen = set()
-    for s in subs:
-        s = "r/" + s.split("/")[-1]
-        if s.lower() in seen:
-            continue
-        seen.add(s.lower())
-        uniq.append(s)
-    subs = uniq[:max_subs]
+    subs = subs[:max_subs]
 
     filters = english_keywords(prompt, keywords)
     if not filters:
@@ -154,8 +174,11 @@ def main():
     ap.add_argument("--default-min-upvotes", type=int, default=20)
     ap.add_argument("--default-limit", type=int, default=1000)
     ap.add_argument("--keywords", default="")
+    ap.add_argument("--seed-subs", default="")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+
+    seed_list = parse_seed_subs(a.seed_subs)
 
     user = USER_TMPL.format(
         prompt=a.prompt,
@@ -164,6 +187,7 @@ def main():
         def_months=a.default_months,
         def_min=a.default_min_upvotes,
         def_limit=a.default_limit,
+        seed_subs=", ".join(seed_list) if seed_list else "(none)",
     )
 
     txt = call_anthropic(SYSTEM, user) or call_openai(SYSTEM, user)
@@ -183,10 +207,13 @@ def main():
             a.default_min_upvotes,
             a.default_limit,
             a.keywords,
+            seed_list,
         )
         plan["rationale"] = "heuristic"
     else:
         plan["rationale"] = "llm"
+        if not plan.get("subreddits") and seed_list:
+            plan["subreddits"] = seed_list[: a.max_subs]
 
     existing_kw = plan.get("filters", {}).get("keywords")
     canonical_kw = _prepare_keywords(a.prompt, existing_kw) or _prepare_keywords(a.prompt, a.keywords)

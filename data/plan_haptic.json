@@ -1,0 +1,22 @@
+{
+  "subreddits": [
+    "r/virtualreality",
+    "r/oculus"
+  ],
+  "params": {
+    "months": 12,
+    "min_upvotes": 20,
+    "limit": 1000
+  },
+  "report_type": "market",
+  "filters": {
+    "keywords": [
+      "haptic",
+      "glove",
+      "market",
+      "positioning"
+    ]
+  },
+  "rationale": "heuristic",
+  "original_prompt": "Haptic glove market positioning"
+}
