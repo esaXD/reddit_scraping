@@ -27,8 +27,8 @@ PROMPT_TMPL = """Context:
 Task:
 Create an executive summary in Markdown that stays faithful to the user prompt and the matched Reddit posts.
 - If matched posts == 0, clearly state that no direct evidence was found and offer next-step research suggestions (specific subreddits, keywords, or data needs).
-- If matched posts < 5, ground every insight in the available posts, flag the limited evidence, and include a short “Next research steps” bullet list.
-- If matched posts ≥ 5, list 3-5 pain points with brief user-language snippets, highlight opportunities tied to the prompt, and propose up to 3 product ideas (name + one-liner + why-now) based on evidence.
+- If matched posts < 5, ground every insight in the available posts, flag the limited evidence, and include a short "Next research steps" bullet list.
+- If matched posts >= 5, list 3-5 pain points with brief user-language snippets, highlight opportunities tied to the prompt, and propose up to 3 product ideas (name + one-liner + why-now) based on evidence.
 - Never drift into generic commentary; stay anchored to the prompt and evidence. If evidence veers off-topic, say so explicitly.
 Keep the answer under 250-300 words."""
 
@@ -39,7 +39,7 @@ def call_openai(md: str):
             return None
         client = OpenAI()
         rsp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5",
             messages=[{"role": "system", "content": SYS}, {"role": "user", "content": md}],
             temperature=0.2,
             max_tokens=500,
@@ -155,8 +155,7 @@ def render_samples(df: pd.DataFrame, limit: int = 8) -> str:
         if pain != "":
             base += f" (pain {pain:.2f})" if isinstance(pain, (int, float)) else f" (pain {pain})"
         lines.append(base)
-    return "
-".join(lines)
+    return "\n".join(lines)
 
 def coverage_note(match_count: int, total: int) -> str:
     if total == 0:

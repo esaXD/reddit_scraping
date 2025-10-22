@@ -112,7 +112,6 @@ def dedupe_merge(primary, extra):
             out.append(text)
     return out
 
-
 def normalize_sub_list(subs_iterable) -> list:
     out, seen = [], set()
     for raw in subs_iterable or []:
@@ -187,7 +186,7 @@ def call_openai(system, user):
             return None
         client = OpenAI()
         r = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5",
             messages=[{"role": "system", "content": system},
                       {"role": "user", "content": user}],
             temperature=0.2,
@@ -224,10 +223,9 @@ def main():
     ap.add_argument("--default-limit", type=int, default=1000)
     ap.add_argument("--keywords", default="")
     ap.add_argument("--seed-subs", default="")
-        ap.add_argument("--seed-keywords-json", default="")
+    ap.add_argument("--seed-keywords-json", default="")
     ap.add_argument("--seed-exclude-json", default="")
     ap.add_argument("--seed-plan-json", default="")
-    ap.add_argument("--seed-exclude-json", default="")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
