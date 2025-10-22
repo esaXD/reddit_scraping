@@ -129,10 +129,6 @@ PY
           DEFAULT_MIN_UPVOTES: ${{ env.DEFAULT_MIN_UPVOTES }}
           LIMIT: ${{ env.DEFAULT_LIMIT }}
           USER_KEYWORDS: ${{ inputs.keywords }}
-          SEED_SUBS: ${{ env.SEED_SUBS }}
-          SEED_KEYWORDS_JSON: ${{ env.SEED_KEYWORDS_JSON }}
-          SEED_MONTHS: ${{ env.SEED_MONTHS }}
-          SEED_MIN_UPVOTES: ${{ env.SEED_MIN_UPVOTES }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
@@ -151,7 +147,7 @@ PY
             --default-limit ${LIMIT} \
             --keywords "${USER_KEYWORDS}" \
             --seed-subs "${SEED_SUBS}" \
-            --seed-keywords-json '${SEED_KEYWORDS_JSON}' \
+            --seed-keywords-json "${SEED_KEYWORDS_JSON}" \
             --out data/plan.json
 
           SUBS=$(python -c "import json;print(' '.join(json.load(open('data/plan.json'))['subreddits']))")
@@ -174,13 +170,12 @@ PY
       - name: Test Reddit API health
         env:
           USER_PROMPT: ${{ inputs.user_prompt }}
-          KEYWORDS_JSON: ${{ env.SCRAPE_KEYWORDS_JSON }}
           MONTHS: ${{ env.MONTHS }}
           MAX_SUBS: ${{ env.DEFAULT_MAX_SUBS }}
         run: |
           python pipeline/test_reddit_api.py \
             --prompt "${USER_PROMPT}" \
-            --keywords-json '${KEYWORDS_JSON}' \
+            --keywords-json "${SCRAPE_KEYWORDS_JSON}" \
             --subs "${SUBS}" \
             --months ${MONTHS} \
             --max-subs ${MAX_SUBS}
@@ -209,7 +204,7 @@ PY
             --months ${MONTHS} \
             --min-upvotes ${MIN_UPVOTES} \
             --limit ${LIMIT} \
-            --keywords-json '${SCRAPE_KEYWORDS_JSON}' \
+            --keywords-json "${SCRAPE_KEYWORDS_JSON}" \
             --out data/raw.jsonl
 
       - name: Quick count
@@ -223,7 +218,7 @@ PY
           python pipeline/filter_keywords.py \
             --in data/raw.jsonl \
             --out data/raw.jsonl \
-            --keywords-json '${SCRAPE_KEYWORDS_JSON}' \
+            --keywords-json "${SCRAPE_KEYWORDS_JSON}" \
             --mode any
 
       - name: Analyze

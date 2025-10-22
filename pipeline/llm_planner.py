@@ -77,6 +77,17 @@ def parse_seed_keywords(seed_json: str):
             return [str(x).strip() for x in data if str(x).strip()]
     except Exception:
         pass
+    cleaned = str(seed_json).strip()
+    if cleaned.startswith("[") and cleaned.endswith("]"):
+        inner = cleaned[1:-1]
+        rough = inner.split(",")
+        extracted = []
+        for item in rough:
+            txt = item.strip().strip("\"' ")
+            if txt:
+                extracted.append(txt)
+        if extracted:
+            return extracted
     try:
         parts = shlex.split(seed_json)
     except Exception:
