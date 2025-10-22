@@ -6,7 +6,7 @@ import shlex
 import sys
 from typing import Dict, List
 
-MODEL = "gpt-5"
+MODEL = "gpt-4o"
 
 SYSTEM = """You are Reddit Research Planner, an assistant for crafting Reddit research seeds.
 Using the given user prompt:
