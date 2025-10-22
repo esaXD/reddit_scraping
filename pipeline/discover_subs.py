@@ -232,15 +232,10 @@ def build_search_queries(prompt: str, keywords: str, max_terms: int = 16):
     if basics:
         queries.append(basics[:max_terms])
 
-    generic = [
-        "physiognomy",
-        "face reading",
-        "mobile app design",
-        "mobile ux",
-        "app security",
-        "mobile innovation",
-    ]
-    queries.append(generic[:max_terms])
+    if not queries:
+        fallback = _basic_terms(prompt, "") or english_keywords(prompt, keywords)
+        fallback = fallback[:max_terms] if fallback else ["technology", "innovation", "product"]
+        queries.append(fallback)
 
     uniq = []
     seen = set()
@@ -261,6 +256,9 @@ FALLBACK_SUBS = {
     "product": ["r/ProductManagement", "r/ProductDesign", "r/ProductMarketing"],
     "security": ["r/cybersecurity", "r/techsupport", "r/netsecstudents"],
     "innovation": ["r/Futurology", "r/startups", "r/Entrepreneur"],
+    "haptic": ["r/virtualreality", "r/VRGaming", "r/HapticTech", "r/AR_MR_XR", "r/wearables"],
+    "glove": ["r/virtualreality", "r/oculus", "r/HapticTech", "r/engineering"],
+    "vr": ["r/virtualreality", "r/VRGaming", "r/SteamVR", "r/oculus"],
 }
 
 

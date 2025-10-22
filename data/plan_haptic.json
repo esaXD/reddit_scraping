@@ -1,7 +1,12 @@
 {
   "subreddits": [
     "r/virtualreality",
-    "r/oculus"
+    "r/oculus",
+    "r/HapticTech",
+    "r/engineering",
+    "r/VRGaming",
+    "r/AR_MR_XR",
+    "r/wearables"
   ],
   "params": {
     "months": 12,
@@ -18,5 +23,5 @@
     ]
   },
   "rationale": "heuristic",
-  "original_prompt": "Haptic glove market positioning"
+  "original_prompt": "haptic glove market positioning"
 }
