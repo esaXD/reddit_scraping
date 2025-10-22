@@ -107,20 +107,20 @@ jobs:
             )
 PY
           python - <<'PY'
-            import json
-            import os
+import json
+import os
 
-            seed_env = json.loads(open("data/seed_env.json", encoding="utf-8").read())
-            keywords_json = json.dumps(seed_env.get("keywords", []), ensure_ascii=False)
-            with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-                f.write(f"SEED_SUBS={seed_env.get('subs', '')}\n")
-                f.write(f"SEED_KEYWORDS_JSON={keywords_json}\n")
-                months = seed_env.get("months")
-                if months:
-                    f.write(f"SEED_MONTHS={months}\n")
-                min_up = seed_env.get("min_upvotes")
-                if min_up is not None:
-                    f.write(f"SEED_MIN_UPVOTES={min_up}\n")
+seed_env = json.loads(open("data/seed_env.json", encoding="utf-8").read())
+keywords_json = json.dumps(seed_env.get("keywords", []), ensure_ascii=False)
+with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+    f.write(f"SEED_SUBS={seed_env.get('subs', '')}\n")
+    f.write(f"SEED_KEYWORDS_JSON={keywords_json}\n")
+    months = seed_env.get("months")
+    if months:
+        f.write(f"SEED_MONTHS={months}\n")
+    min_up = seed_env.get("min_upvotes")
+    if min_up is not None:
+        f.write(f"SEED_MIN_UPVOTES={min_up}\n")
 PY
 
       - name: Plan (LLM or heuristic)

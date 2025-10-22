@@ -8,9 +8,20 @@
   "report_type": "faq",
   "filters": {
     "keywords": [
-      "test"
+      "haptic",
+      "haptic technology",
+      "haptic glove",
+      "glove",
+      "wearable glove",
+      "smart glove",
+      "market",
+      "market positioning",
+      "positioning",
+      "market position",
+      "vr glove",
+      "haptic wearable"
     ]
   },
   "rationale": "heuristic",
-  "original_prompt": "test"
+  "original_prompt": "haptik eldivenin marketteki yeri"
 }
