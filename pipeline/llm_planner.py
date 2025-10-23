@@ -146,7 +146,7 @@ def call_openai(system, user):
             return None
         client = OpenAI()
         r = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[{"role": "system", "content": system},
                       {"role": "user", "content": user}],
             temperature=0.2,

@@ -5,7 +5,7 @@ import os
 import sys
 from typing import List
 
-MODEL = "gpt-4o"
+MODEL = "gpt-4o-mini"
 
 SYSTEM = """You are a Reddit research planner. Given a user prompt, suggest up to __MAX_SUBS__ highly relevant subreddits.
 Return strict JSON:
