@@ -7,7 +7,7 @@ from typing import List
 
 MODEL = "gpt-4o"
 
-SYSTEM = """You are a Reddit research planner. Given a user prompt, suggest up to {max_subs} highly relevant subreddits.
+SYSTEM = """You are a Reddit research planner. Given a user prompt, suggest up to __MAX_SUBS__ highly relevant subreddits.
 Return strict JSON:
 {
   "subreddits": [
@@ -36,19 +36,23 @@ GENERIC_SUBS = {
 def call_openai(prompt: str, max_subs: int):
     try:
         from openai import OpenAI
-    except ImportError:
+        from openai import APIConnectionError, RateLimitError, AuthenticationError, BadRequestError
+    except ImportError as e:
+        print(f"[seed] openai import hatası: {e}", file=sys.stderr, flush=True)
         return None
 
     if not os.getenv("OPENAI_API_KEY"):
+        print("[seed] OPENAI_API_KEY tanımlı değil.", file=sys.stderr, flush=True)
         return None
 
     client = OpenAI()
-    user_prompt = f"User prompt: {prompt}\nMaximum subreddits: {max_subs}"
+    user_prompt = f"User prompt: {prompt}\nMaximum subreddits: {{max_subs}}"
     try:
+        system_prompt = SYSTEM.replace("__MAX_SUBS__", str(max_subs))
         resp = client.chat.completions.create(
             model=MODEL,
             messages=[
-                {"role": "system", "content": SYSTEM.format(max_subs=max_subs)},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.2,
@@ -56,8 +60,21 @@ def call_openai(prompt: str, max_subs: int):
             response_format={"type": "json_object"},
         )
         return resp.choices[0].message.content
-    except Exception:
-        return None
+
+    except AuthenticationError as e:
+        print(f"[seed] Auth hatası: {e}", file=sys.stderr, flush=True)
+    except RateLimitError as e:
+        print(f"[seed] Rate limit: {e}", file=sys.stderr, flush=True)
+    except APIConnectionError as e:
+        print(f"[seed] Bağlantı hatası: {e}", file=sys.stderr, flush=True)
+    except BadRequestError as e:
+        print(f"[seed] Geçersiz istek: {e}", file=sys.stderr, flush=True)
+    except Exception as e:
+        # Son çare: mümkünse response gövdesi
+        msg = getattr(e, "message", None) or str(e)
+        print(f"[seed] Genel hata: {msg}", file=sys.stderr, flush=True)
+    return None
+
 
 
 def normalize_subreddits(items):
