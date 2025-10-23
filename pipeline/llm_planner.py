@@ -12,7 +12,6 @@ Report type hint: {report_type}
 Max subreddits: {max_subs}
 Defaults: months={def_months}, min_upvotes={def_min}, limit={def_limit}
 Candidate subreddits from search: {seed_subs}
-Candidate keywords from search: {seed_keywords}
 Schema:
 {{
   "subreddits": ["r/...", "..."],
@@ -68,32 +67,6 @@ def parse_seed_subs(seed_str: str) -> list:
     return normalize_sub_list(parts)
 
 
-def parse_seed_keywords(seed_json: str):
-    if not seed_json:
-        return []
-    try:
-        data = json.loads(seed_json)
-        if isinstance(data, list):
-            return [str(x).strip() for x in data if str(x).strip()]
-    except Exception:
-        pass
-    cleaned = str(seed_json).strip()
-    if cleaned.startswith("[") and cleaned.endswith("]"):
-        inner = cleaned[1:-1]
-        rough = inner.split(",")
-        extracted = []
-        for item in rough:
-            txt = item.strip().strip("\"' ")
-            if txt:
-                extracted.append(txt)
-        if extracted:
-            return extracted
-    try:
-        parts = shlex.split(seed_json)
-    except Exception:
-        parts = seed_json.replace(",", " ").split()
-    return [p.strip() for p in parts if p.strip()]
-
 
 def dedupe_merge(primary, extra):
     out = []
@@ -127,12 +100,11 @@ def normalize_sub_list(subs_iterable) -> list:
     return out
 
 
-def heuristic(prompt, report_type, max_subs, m, u, lim, keywords, seed_subs, seed_keywords, seed_exclude):
+def heuristic(prompt, report_type, max_subs, m, u, lim, seed_subs):
     words = norm(prompt).split()
     subs = normalize_sub_list(seed_subs)
     seen = {s.lower() for s in subs}
 
-    # Basit curated eşleşmeler (nötr; meditasyona zorlamıyoruz)
     for w in words:
         if w in CURATED:
             for s in CURATED[w]:
@@ -142,11 +114,9 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords, seed_subs, see
                 subs.append(tag)
                 seen.add(tag.lower())
 
-    # Hiçbir şey bulunamazsa boş bırak; discovery dolduracak
     if not subs:
         subs = []
 
-    # Report type otomatik seçimi
     if report_type == "auto":
         if any(w in words for w in ["market", "pricing", "monetization"]):
             report_type = "market"
@@ -163,21 +133,11 @@ def heuristic(prompt, report_type, max_subs, m, u, lim, keywords, seed_subs, see
 
     subs = subs[:max_subs]
 
-    seed_kw_text = " ".join(seed_keywords)
-    keyword_payload = " ".join(filter(None, [seed_kw_text, keywords]))
-    filters = english_keywords(prompt, keyword_payload)
-    if not filters:
-        filters = english_keywords(prompt, "")
-    filters = filters[:24] if filters else []
-
-    plan = {
+    return {
         "subreddits": subs,
         "params": {"months": int(m), "min_upvotes": int(u), "limit": int(lim)},
         "report_type": report_type,
     }
-    if filters:
-        plan["filters"] = {"keywords": filters}
-    return plan
 
 def call_openai(system, user):
     try:
@@ -186,7 +146,7 @@ def call_openai(system, user):
             return None
         client = OpenAI()
         r = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5",
             messages=[{"role": "system", "content": system},
                       {"role": "user", "content": user}],
             temperature=0.2,
@@ -230,9 +190,6 @@ def main():
     a = ap.parse_args()
 
     seed_list = parse_seed_subs(a.seed_subs)
-    seed_keywords = parse_seed_keywords(a.seed_keywords_json)
-    seed_exclude = parse_seed_keywords(a.seed_exclude_json)
-
     seed_plan = {}
     if a.seed_plan_json:
         try:
@@ -248,7 +205,6 @@ def main():
         def_min=a.default_min_upvotes,
         def_limit=a.default_limit,
         seed_subs=", ".join(seed_list) if seed_list else "(none)",
-        seed_keywords=", ".join(seed_keywords) if seed_keywords else "(none)",
     )
 
     txt = call_anthropic(SYSTEM, user) or call_openai(SYSTEM, user)
@@ -267,10 +223,7 @@ def main():
             a.default_months,
             a.default_min_upvotes,
             a.default_limit,
-            a.keywords,
             seed_list,
-            seed_keywords,
-            seed_exclude,
         )
         plan["rationale"] = "heuristic"
     else:
@@ -278,36 +231,17 @@ def main():
         if not plan.get("subreddits") and seed_list:
             plan["subreddits"] = seed_list[: a.max_subs]
 
-    existing_kw = plan.get("filters", {}).get("keywords")
-    seed_kw_json = json.dumps(seed_keywords, ensure_ascii=False)
-    seed_ex_json = json.dumps(seed_exclude, ensure_ascii=False)
-    canonical_kw = (
-        _prepare_keywords(a.prompt, existing_kw)
-        or _prepare_keywords(a.prompt, seed_kw_json)
-        or _prepare_keywords(a.prompt, seed_ex_json)
-        or _prepare_keywords(a.prompt, a.keywords)
-    )
-    if canonical_kw:
-        plan.setdefault("filters", {})["keywords"] = canonical_kw
+    user_keywords = _prepare_keywords(a.prompt, a.keywords) if a.keywords else []
+    if user_keywords:
+        plan.setdefault("filters", {})["keywords"] = user_keywords
     else:
         plan.pop("filters", None)
 
-    if seed_exclude:
-        current_ex = plan.get("filters", {}).get("exclude", [])
-        merged_ex = dedupe_merge(current_ex, seed_exclude)
-        if merged_ex:
-            plan.setdefault("filters", {})["exclude"] = merged_ex
-
-
     if seed_plan:
         plan.setdefault("topic_themes", seed_plan.get("topic_themes", plan.get("topic_themes", [])))
-        plan.setdefault("keyword_plan", seed_plan.get("keyword_plan", plan.get("keyword_plan", {})))
-        plan["seed_metadata"] = seed_plan
         plan.setdefault("warnings", dedupe_merge(plan.get("warnings", []), seed_plan.get("warnings", [])))
-        seed_filters = seed_plan.get("filters", {}) or {}
-        if seed_filters.get("languages"):
-            plan.setdefault("filters", {})["languages"] = dedupe_merge(plan.get("filters", {}).get("languages", []), seed_filters.get("languages"))
         plan.setdefault("validation_hints", dedupe_merge(plan.get("validation_hints", []), seed_plan.get("validation_hints", [])))
+        plan["seed_metadata"] = seed_plan
     # normalize
     uniq = []
     seen = set()
@@ -318,25 +252,22 @@ def main():
             uniq.append(s)
     plan["subreddits"] = uniq[: a.max_subs]
     plan["original_prompt"] = a.prompt
-    if seed_list or seed_keywords:
+    if seed_list:
+        context = {"subreddits": seed_list}
         meta_subs = []
         if seed_plan:
             for entry in seed_plan.get("subreddits", []):
                 if isinstance(entry, dict):
+                    meta = entry.get("meta", entry)
                     meta_subs.append({
                         "name": entry.get("name"),
-                        "confidence": entry.get("confidence"),
-                        "why": entry.get("why"),
-                        "signal_score": entry.get("signal_score"),
-                        "volume_hint": entry.get("volume_hint"),
-                        "flags": entry.get("flags"),
+                        "confidence": meta.get("confidence"),
+                        "why": meta.get("why"),
+                        "flags": meta.get("flags", []),
                     })
-        plan["seed_context"] = {
-            "subreddits": seed_list,
-            "keywords": seed_keywords,
-            "exclude": seed_exclude,
-            "metadata": meta_subs,
-        }
+        if meta_subs:
+            context["metadata"] = meta_subs
+        plan["seed_context"] = context
 
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=2)

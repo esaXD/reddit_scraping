@@ -8,7 +8,7 @@ from typing import List
 from datetime import datetime, timedelta
 import requests
 from util import ensure_dirs, save_jsonl, clean_text, now_iso
-from discover_subs import english_keywords, build_search_queries, ASCII_FALLBACK
+from discover_subs import english_keywords
 
 BASE = "https://api.pullpush.io/reddit/search/submission/"  # PullPush mirror
 
@@ -143,11 +143,7 @@ def main():
     a = ap.parse_args()
 
     ensure_dirs(a.out)
-    base_months = max(1, int(a.months))
-    base_min_upvotes = max(0, int(a.min_upvotes))
-    target_posts = max(40, min(a.limit, 150))
 
-    # Subreddit sonuçları + keyword sonuçları = birleşim
     prompt_text = a.prompt or ""
     raw_keywords = list(a.keywords or [])
     if a.keywords_json:
@@ -162,16 +158,17 @@ def main():
     for kw in raw_keywords:
         if kw is None:
             continue
-        text = str(kw).strip()
-        if not text:
+        text_kw = str(kw).strip()
+        if not text_kw:
             continue
-        key = text.lower()
-        if key in seen_kw:
+        key_kw = text_kw.lower()
+        if key_kw in seen_kw:
             continue
-        seen_kw.add(key)
-        keywords_clean.append(text)
-
+        seen_kw.add(key_kw)
+        keywords_clean.append(text_kw)
+    
     keyword_input = " ".join(keywords_clean)
+    
     exclude_terms = []
     if a.exclude_keywords_json:
         try:
@@ -180,72 +177,48 @@ def main():
                 exclude_terms = [str(x).strip().casefold() for x in extra_ex if str(x).strip()]
         except Exception:
             pass
-    keyword_variants = english_keywords(prompt_text, keyword_input)
-    search_strategies = build_search_queries(prompt_text, keyword_input) if (prompt_text or keyword_input) else []
+    
     if keywords_clean:
         print("Seed keywords:", ", ".join(keywords_clean), flush=True)
+    
+    base_months = max(1, int(a.months))
+    base_min_upvotes = max(0, int(a.min_upvotes))
 
-    attempts = [
-        {
-            "months": max(base_months, 24),
-            "min_upvotes": min(base_min_upvotes, 10),
-            "label": "base window",
-        },
-        {
-            "months": max(36, base_months * 2),
-            "min_upvotes": 0,
-            "label": "broad fallback",
-        },
-    ]
+    # use user-provided time window and filters directly
+    since = month_ago_utc(base_months)
+
+    subs_rows = pushshift_by_subs(a.subs, since, a.limit, base_min_upvotes)
+    print(f"[scrape] subreddit pass collected {len(subs_rows)} rows", flush=True)
+
+    rows_kw = []
+    if keywords_clean:
+        search_terms = english_keywords("", keyword_input)[:16] if keyword_input else []
+        if not search_terms:
+            search_terms = keywords_clean
+        search_terms = [term for term in search_terms if term]
+        if search_terms:
+            result = pushshift_by_keywords(search_terms, since, a.limit, base_min_upvotes)
+            rows_kw.extend(result)
+            print(f"[scrape] keyword search collected {len(result)} rows", flush=True)
+
+    rows = subs_rows + rows_kw
+    print(f"[scrape] total raw rows before dedupe: {len(rows)}", flush=True)
 
     ded = []
     seen = set()
-    for idx, attempt in enumerate(attempts):
-        months_cur = attempt["months"]
-        min_upvotes_cur = attempt["min_upvotes"]
-        label = attempt["label"]
-        since = month_ago_utc(months_cur)
-
-        print(f"--- Attempt '{label}' months={months_cur} min_upvotes={min_upvotes_cur} ---", flush=True)
-        subs_rows = pushshift_by_subs(a.subs, since, a.limit, min_upvotes_cur)
-        print(f"[attempt:{label}] subs_rows={len(subs_rows)}", flush=True)
-
-        kw_rows = []
-        if search_strategies:
-            for idx, terms in enumerate(search_strategies, 1):
-                results = pushshift_by_keywords(terms, since, a.limit, min_upvotes_cur)
-                kw_rows.extend(results)
-                print(f"[attempt:{label}] keyword_strategy_{idx} added={len(results)} cumulative={len(kw_rows)}", flush=True)
-                if len(kw_rows) >= max(40, a.limit // 5):
-                    break
-        else:
-            print(f"[attempt:{label}] no keyword strategies available", flush=True)
-
-        rows = subs_rows + kw_rows
-        added = 0
-        for r in rows:
-            if r["id"] in seen:
-                continue
-            seen.add(r["id"])
-            ded.append(r)
-            added += 1
-        print(f"[attempt:{label}] added={added} total={len(ded)}", flush=True)
-
-        if len(ded) >= target_posts:
-            print(f"[attempt:{label}] reached target {target_posts}; stopping attempts.", flush=True)
-            break
-        if idx == 0 and added < max(5, target_posts // 4):
-            print(f"[attempt:{label}] added {added} posts; escalating to broad fallback early.", flush=True)
+    for r in rows:
+        rid = r.get("id")
+        if rid in seen:
             continue
-
-    original_count = len(ded)
+        seen.add(rid)
+        ded.append(r)
 
     if exclude_terms:
         before = len(ded)
         filtered_ex = []
         for row in ded:
-            text = f"{row.get('title','')} {row.get('selftext','')}".casefold()
-            if any(term in text for term in exclude_terms if term):
+            text_row = f"{row.get('title','')} {row.get('selftext','')}".casefold()
+            if any(term in text_row for term in exclude_terms if term):
                 continue
             filtered_ex.append(row)
         removed = before - len(filtered_ex)
@@ -253,32 +226,17 @@ def main():
         if removed:
             print(f"[filter] removed {removed} posts based on exclude keywords.", flush=True)
 
-    if keyword_variants:
-        match_terms = []
-        for term in keyword_variants:
-            low = term.casefold()
-            match_terms.append(low)
-            match_terms.append(low.translate(ASCII_FALLBACK))
-        match_terms = [m for m in {t for t in match_terms if t}]
+    if keywords_clean:
+        lowers = [k.casefold() for k in keywords_clean]
+        filtered_kw = []
+        for row in ded:
+            text_row = f"{row.get('title','')} {row.get('selftext','')}".casefold()
+            if any(term in text_row for term in lowers):
+                filtered_kw.append(row)
+        print(f"[filter] keyword pass kept {len(filtered_kw)} posts", flush=True)
+        ded = filtered_kw
 
-        broad_terms = {part.strip().casefold() for term in keyword_variants for part in term.split()}
-        broad_terms |= {bt.translate(ASCII_FALLBACK) for bt in broad_terms}
-        broad_terms = {t for t in broad_terms if t}
-
-        def _matches(row, terms):
-            text = f"{row.get('title','')} {row.get('selftext','')}".casefold()
-            return any(term in text for term in terms)
-
-        filtered = [r for r in ded if _matches(r, match_terms)]
-        if len(filtered) < 15 and broad_terms:
-            print(f"[filter] strict kept {len(filtered)} posts; retrying with broader tokens.", flush=True)
-            filtered = [r for r in ded if _matches(r, broad_terms)]
-
-        if not filtered and ded:
-            print("[filter] all posts removed by keyword filter; returning unfiltered data.", flush=True)
-        else:
-            ded = filtered
-
+    original_count = len(ded)
     save_jsonl(ded, a.out)
     print(f"Saved {len(ded)} items to {a.out} (from {original_count} collected)", flush=True)
 

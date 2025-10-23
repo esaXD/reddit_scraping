@@ -15,6 +15,18 @@ on:
         description: "Max subreddits to analyze"
         required: false
         default: "8"
+      months:
+        description: "Look-back window (months)"
+        required: false
+        default: "12"
+      min_upvotes:
+        description: "Minimum upvotes per post"
+        required: false
+        default: "20"
+      limit:
+        description: "Per-subreddit post cap"
+        required: false
+        default: "1000"
       keywords:
         description: "Optional keyword filter"
         required: false
@@ -34,9 +46,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_MAX_SUBS: "${{ inputs.max_subs || '8' }}"
-      DEFAULT_MONTHS: "12"
-      DEFAULT_MIN_UPVOTES: "20"
-      DEFAULT_LIMIT: "1000"
+      DEFAULT_MONTHS: "${{ inputs.months || '12' }}"
+      DEFAULT_MIN_UPVOTES: "${{ inputs.min_upvotes || '20' }}"
+      DEFAULT_LIMIT: "${{ inputs.limit || '1000' }}"
     steps:
       - uses: actions/checkout@v4
 
